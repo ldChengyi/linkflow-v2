@@ -2,7 +2,7 @@
 
 > An IoT cloud platform built on event-driven architecture, with polyglot services and enterprise-grade middleware.
 
-[简体中文](./README.zh-CN.md) | English
+[简体中文](./README_zh-CN.md) | English
 
 ## Background
 
