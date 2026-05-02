@@ -1,0 +1,216 @@
+# ============================================================
+# LinkFlow v2 - .gitignore
+# 多语言项目: Go / Rust / Python / TypeScript
+# ============================================================
+
+# ------------------------------------------------------------
+# 操作系统相关
+# ------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ------------------------------------------------------------
+# IDE 和编辑器
+# ------------------------------------------------------------
+# VSCode (保留 .vscode/settings.json 共享时可注释掉这行)
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# JetBrains
+.idea/
+*.iml
+*.iws
+
+# Vim/Nvim
+*.swp
+*.swo
+*.swn
+*~
+Session.vim
+.netrwhist
+tags
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ------------------------------------------------------------
+# 环境变量和密钥 (绝对不能提交)
+# ------------------------------------------------------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+
+# ------------------------------------------------------------
+# 日志和临时文件
+# ------------------------------------------------------------
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+*.cache
+
+# ------------------------------------------------------------
+# Docker 相关
+# ------------------------------------------------------------
+# Docker volumes 数据 (如果用 bind mount 才需要)
+data/
+volumes/
+
+# Docker compose override (本地个人配置)
+docker-compose.override.yml
+
+# ------------------------------------------------------------
+# Go
+# ------------------------------------------------------------
+# 编译产物
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+build/
+dist/
+
+# 测试和覆盖率
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# 依赖目录 (用 go modules 不需要 vendor)
+vendor/
+
+# ------------------------------------------------------------
+# Rust
+# ------------------------------------------------------------
+target/
+Cargo.lock.bak
+**/*.rs.bk
+
+# ------------------------------------------------------------
+# Python
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 虚拟环境
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# 测试和覆盖率
+.tox/
+.coverage
+.coverage.*
+.cache
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ------------------------------------------------------------
+# Node.js / TypeScript / 前端
+# ------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# 构建产物
+dist/
+build/
+.next/
+out/
+.nuxt/
+.cache/
+.parcel-cache/
+
+# 类型检查
+*.tsbuildinfo
+
+# ------------------------------------------------------------
+# 数据库相关
+# ------------------------------------------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+
+# ------------------------------------------------------------
+# 编译/构建工具
+# ------------------------------------------------------------
+.gradle/
+*.class
+*.jar
+*.war
+
+# ------------------------------------------------------------
+# 项目特定文件
+# ------------------------------------------------------------
+# 本地测试数据
+test-data/
+mock-data/
+
+# 性能测试结果
+benchmark-results/
+*.prof
+*.pprof
+
+# 文档生成产物
+docs/_build/
+site/
+
+# 个人笔记 (如果想保留某些笔记可以建立 docs/ 目录提交)
+NOTES.md
+TODO.md
+scratch/
