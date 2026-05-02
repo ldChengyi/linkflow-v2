@@ -1,0 +1,175 @@
+name: linkflow-v2
+
+# ============================================================
+# LinkFlow v2 - 第一阶段基础设施
+# 包含: EMQX (MQTT)、Redpanda (Kafka)、TimescaleDB、Redis
+# 后续阶段会逐步添加: MinIO、Nacos、APISIX、Jaeger、Prometheus 等
+# ============================================================
+
+services:
+  # ============================================
+  # EMQX - MQTT Broker (设备接入)
+  # Dashboard: http://localhost:18083  (admin / public)
+  # MQTT TCP:  1883
+  # ============================================
+  emqx:
+    image: emqx/emqx:5.4.1
+    container_name: linkflow-emqx
+    restart: unless-stopped
+    ports:
+      - "1883:1883" # MQTT TCP
+      - "8083:8083" # MQTT WebSocket
+      - "18083:18083" # Dashboard
+    environment:
+      EMQX_NAME: linkflow-emqx
+      EMQX_HOST: 127.0.0.1
+      EMQX_DASHBOARD__DEFAULT_USERNAME: admin
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: public
+      # 允许匿名连接 (开发环境用,生产环境关闭)
+      EMQX_ALLOW_ANONYMOUS: "true"
+    volumes:
+      - emqx_data:/opt/emqx/data
+      - emqx_log:/opt/emqx/log
+    healthcheck:
+      test: [ "CMD", "/opt/emqx/bin/emqx", "ctl", "status" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - linkflow
+
+  # ============================================
+  # Redpanda - Kafka 协议兼容的消息总线
+  # Kafka (宿主机访问): localhost:19092
+  # Kafka (容器内访问): redpanda:9092
+  # Admin API:           localhost:19644
+  # ============================================
+  redpanda:
+    image: redpandadata/redpanda:v23.3.5
+    container_name: linkflow-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr=internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr=internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --smp=1
+      - --memory=1G
+      - --mode=dev-container
+      - --default-log-level=info
+    ports:
+      - "18081:18081" # Schema Registry
+      - "18082:18082" # REST Proxy
+      - "19092:19092" # Kafka (宿主机访问)
+      - "19644:9644" # Admin API
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: [ "CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1" ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - linkflow
+
+  # Redpanda Console - Kafka 可视化管理界面
+  # http://localhost:8080
+  redpanda-console:
+    image: redpandadata/console:v2.4.5
+    container_name: linkflow-redpanda-console
+    restart: unless-stopped
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
+      REDPANDA_ADMINAPI_ENABLED: "true"
+      REDPANDA_ADMINAPI_URLS: http://redpanda:9644
+    networks:
+      - linkflow
+
+  # ============================================
+  # TimescaleDB - PostgreSQL + 时序扩展
+  # 用一个数据库实例同时支撑业务数据和时序数据
+  # 连接: postgres://linkflow:linkflow123@localhost:5432/linkflow
+  # ============================================
+  timescaledb:
+    image: timescale/timescaledb:2.13.0-pg16
+    container_name: linkflow-timescaledb
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: linkflow
+      POSTGRES_PASSWORD: linkflow123
+      POSTGRES_DB: linkflow
+      TS_TUNE_MEMORY: 2GB
+      TS_TUNE_NUM_CPUS: "2"
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+      - ./init-scripts/timescaledb:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U linkflow -d linkflow" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - linkflow
+
+  # ============================================
+  # Redis - 缓存 / 在线状态 / 分布式锁
+  # 连接: redis://localhost:6379
+  # ============================================
+  redis:
+    image: redis:7.2-alpine
+    container_name: linkflow-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - "512mb"
+      - --maxmemory-policy
+      - "allkeys-lru"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - linkflow
+
+# ============================================
+# 数据卷 - 持久化数据,避免重启后丢失
+# ============================================
+volumes:
+  emqx_data:
+  emqx_log:
+  redpanda_data:
+  timescaledb_data:
+  redis_data:
+
+    # ============================================
+    # 自定义网络 - 让所有服务用容器名互相访问
+    # ============================================
+networks:
+  linkflow:
+    name: linkflow-network
+    driver: bridge
