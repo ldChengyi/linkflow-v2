@@ -1,0 +1,74 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://linkflow.dev/contracts/events/envelope",
+    "title": "Event Envelope",
+    "description": "Common envelope shared by all events in LinkFlow. The payload field is event-specific and validated by its own schema.",
+    "type": "object",
+    "required": [
+        "event_id",
+        "event_type",
+        "event_version",
+        "occurred_at",
+        "producer",
+        "tenant_id",
+        "payload"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Globally unique event identifier. Used for idempotency. UUID v7 preferred, v4 acceptable."
+        },
+        "event_type": {
+            "type": "string",
+            "pattern": "^[a-z]+(\\.[a-z]+)+$",
+            "minLength": 3,
+            "maxLength": 128,
+            "description": "Stable business event name in dotted lowercase form, e.g. 'device.telemetry.received'. Must match the producer's intent and remain stable across schema versions."
+        },
+        "event_version": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Schema version of the payload. Incremented on every change to the payload schema. The subject's major version (lf.v1.*) only changes on breaking changes."
+        },
+        "occurred_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp marking when the business fact occurred. Producers should set this to the actual event time, not the publish time."
+        },
+        "producer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Identifier of the service that produced the event, e.g. 'ingest-gateway', 'rule-engine'. Lowercase, kebab-case."
+        },
+        "tenant_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Tenant boundary identifier. Use 'default' if multi-tenancy is not yet enabled, but the field is required from day one."
+        },
+        "trace_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{32}$",
+            "description": "W3C Trace Context trace ID (32 hex characters). Optional but recommended for observability. Producers should propagate the active trace context."
+        },
+        "correlation_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Workflow or external request identifier shared by related events. Used to query all events caused by the same user action, device session, rule run, or command workflow."
+        },
+        "causation_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Event ID of the event that directly caused this event. Used to reconstruct event chains across services."
+        },
+        "payload": {
+            "type": "object",
+            "description": "Event-specific business data. Validated by the payload schema corresponding to event_type and event_version."
+        }
+    }
+}

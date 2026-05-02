@@ -1,0 +1,63 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://linkflow.dev/contracts/events/lf.v1.device.telemetry.received",
+    "title": "device.telemetry.received v1",
+    "description": "Emitted when a device reports telemetry data through any ingestion protocol (MQTT, HTTP, CoAP). The event carries the raw telemetry values and the protocol context. This schema validates only the payload; the full event must also satisfy envelope.schema.json.",
+    "type": "object",
+    "required": [
+        "device_id",
+        "product_key",
+        "protocol",
+        "metrics"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "device_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Stable device identifier within the tenant scope. Combined with tenant_id, uniquely identifies a device."
+        },
+        "product_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Identifier of the product (device model). Used to look up the thing model and validate metric names."
+        },
+        "protocol": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 32,
+            "pattern": "^[a-z][a-z0-9-]*$",
+            "description": "Ingestion protocol used by the device. Known values include mqtt, http, coap, and websocket, but this field is intentionally open for future adapters such as modbus, opcua, or lora."
+        },
+        "metrics": {
+            "type": "object",
+            "minProperties": 1,
+            "description": "Map of metric name to value. Metric names should match the product's thing model. Values can be number, boolean, or string depending on the metric type.",
+            "patternProperties": {
+                "^[a-z][a-z0-9_]*$": {
+                    "oneOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "boolean"
+                        },
+                        {
+                            "type": "string",
+                            "maxLength": 1024
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": false
+        },
+        "raw": {
+            "type": "object",
+            "description": "Optional metadata captured by the ingestion layer, such as the original source, raw payload size, or protocol-specific headers. Consumers should not depend on specific fields here.",
+            "additionalProperties": true
+        }
+    }
+}
