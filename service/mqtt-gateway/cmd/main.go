@@ -9,17 +9,14 @@ import (
 
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/config"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/envelope"
-	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/handler"
+	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/kafka"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/mqtt"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/publisher"
+	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/registry"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/router"
+	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/util"
 )
 
-func mustRoute(r *router.Router, name, pattern string, h router.Handler) {
-	if err := r.Handle(name, pattern, h); err != nil {
-		panic(err)
-	}
-}
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -29,14 +26,28 @@ func main() {
 		log.Error("load config", "err", err)
 		os.Exit(1)
 	}
+ 
+	kafkaClient, err := kafka.New(kafka.Options{
+		Brokers: util.SpiltCSV(cfg.KafkaBrokers),
+	}, log)
+	if err != nil {
+		log.Error("create kafka client", "err", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := kafkaClient.Close(); err != nil {
+			log.Error("close kafka client", "err", err)
+		}
+	}()
 
-	pub := publisher.Stdout{Log: log}
+	pub := publisher.NewKafkaEvent(kafkaClient)
 	eb := envelope.Builder{Producer: cfg.Producer, TenantID: cfg.TenantID}
 
 	r := router.New(log)
-	mustRoute(r, "device.property", `^lf/v1/(?P<product_key>[^/]+)/(?P<device_name>[^/]+)/property/up/post$`,
-		handler.Property(eb, pub),
-	)
+	if err := registry.RegisterAll(r, eb, pub); err != nil {
+		log.Error("register routes", "err", err)
+		os.Exit(1)
+	}
 
 	cli := mqtt.New(mqtt.Options{
 		BrokerURL: cfg.BrokerURL,

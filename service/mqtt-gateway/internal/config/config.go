@@ -12,6 +12,8 @@ type Config struct {
 	Password  string
 	TenantID  string
 	Producer  string
+	
+	KafkaBrokers string
 }
 
 
@@ -23,6 +25,7 @@ func Load() (Config, error) {
 		Password:  os.Getenv("MQTT_PASSWORD"),
 		TenantID:  getEnv("LF_TENANT_ID", "default"),
 		Producer:  getEnv("LF_PRODUCER", "mqtt-gateway"),
+		KafkaBrokers: getEnv("KAFKA_BROKER_URL", "127.0.0.1:19092"),
 	}
 
 	if cfg.BrokerURL == "" {

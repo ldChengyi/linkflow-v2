@@ -25,7 +25,7 @@ func Property(b envelope.Builder, pub publisher.Publisher) router.Handler {
 			return fmt.Errorf("decode metrics: %w", err)
 		}
 		p := telemetryPayload {
-			DeviceID: msg.Vars["device_name"],
+			DeviceID: msg.Vars["device_id"],
 			ProductKey: msg.Vars["product_key"],
 			Protocol: "mqtt",
 			Metrics: metrics,
