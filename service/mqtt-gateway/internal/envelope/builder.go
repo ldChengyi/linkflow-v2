@@ -16,7 +16,7 @@ type Envelope struct {
 	TenantID      string          `json:"tenant_id"`
 	TraceID       string          `json:"trace_id,omitempty"`
 	CorrelationID string          `json:"correlation_id,omitempty"`
-	CausationID   string          `json:"causation_id, omitempty"`
+	CausationID   string          `json:"causation_id,omitempty"`
 	Payload       json.RawMessage `json:"payload"`
 }
 
