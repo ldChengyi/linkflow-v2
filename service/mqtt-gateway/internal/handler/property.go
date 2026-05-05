@@ -12,9 +12,9 @@ import (
 )
 
 type telemetryPayload struct {
-	DeviceID   string `json:"device_id"`
-	ProductKey string `json:"product_key"`
-	Protocol   string `json:"protocol"`
+	DeviceID   string         `json:"device_id"`
+	ProductKey string         `json:"product_key"`
+	Protocol   string         `json:"protocol"`
 	Metrics    map[string]any `json:"metrics"`
 }
 
@@ -24,13 +24,13 @@ func Property(b envelope.Builder, pub publisher.Publisher) router.Handler {
 		if err := json.Unmarshal(msg.Payload, &metrics); err != nil {
 			return fmt.Errorf("decode metrics: %w", err)
 		}
-		p := telemetryPayload {
-			DeviceID: msg.Vars["device_id"],
+		p := telemetryPayload{
+			DeviceID:   msg.Vars["device_id"],
 			ProductKey: msg.Vars["product_key"],
-			Protocol: "mqtt",
-			Metrics: metrics,
+			Protocol:   "mqtt",
+			Metrics:    metrics,
 		}
-		env , err := b.New("device.telemetry.received", 1, p, time.Time{})
+		env, err := b.New("device.telemetry.received", 1, p, time.Time{})
 		if err != nil {
 			return err
 		}

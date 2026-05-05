@@ -8,37 +8,37 @@ import (
 	kafkago "github.com/segmentio/kafka-go"
 )
 
-type Options struct{
+type Options struct {
 	Brokers []string
 }
 
 type Client struct {
 	writer *kafkago.Writer
-	log *slog.Logger
+	log    *slog.Logger
 }
 
 func New(opt Options, log *slog.Logger) (*Client, error) {
 	if len(opt.Brokers) == 0 {
-		return  nil, fmt.Errorf("kafka brokers are required")
+		return nil, fmt.Errorf("kafka brokers are required")
 	}
 
-	w := &kafkago.Writer {
-		Addr : kafkago.TCP(opt.Brokers...),
-		Balancer : &kafkago.Hash{},
+	w := &kafkago.Writer{
+		Addr:     kafkago.TCP(opt.Brokers...),
+		Balancer: &kafkago.Hash{},
 	}
 
 	return &Client{
 		writer: w,
-		log: log,
+		log:    log,
 	}, nil
 
 }
 
 func (c *Client) Send(
-	ctx context.Context, 
+	ctx context.Context,
 	topic string,
-	key []byte, 
-	value []byte, 
+	key []byte,
+	value []byte,
 	headers map[string]string,
 ) error {
 	if topic == "" {
@@ -47,19 +47,19 @@ func (c *Client) Send(
 
 	kafkaHeaders := make([]kafkago.Header, 0, len(headers))
 	for k, v := range headers {
-		kafkaHeaders = append(kafkaHeaders, kafkago.Header {
-			Key: k,
+		kafkaHeaders = append(kafkaHeaders, kafkago.Header{
+			Key:   k,
 			Value: []byte(v),
 		})
 	}
 
 	if err := c.writer.WriteMessages(ctx, kafkago.Message{
-		Topic: topic,
-		Key: key,
-		Value: value,
+		Topic:   topic,
+		Key:     key,
+		Value:   value,
 		Headers: kafkaHeaders,
 	}); err != nil {
-		return fmt.Errorf("write kafka message to topic %q: %w",topic, err)
+		return fmt.Errorf("write kafka message to topic %q: %w", topic, err)
 	}
 	c.log.Info("kafka message sent", "topic", topic)
 	return nil
@@ -71,29 +71,3 @@ func (c *Client) Close() error {
 	}
 	return c.writer.Close()
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

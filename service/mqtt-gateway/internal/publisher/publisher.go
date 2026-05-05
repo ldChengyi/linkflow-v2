@@ -9,4 +9,3 @@ import (
 type Publisher interface {
 	Publish(ctx context.Context, e envelope.Envelope) error
 }
-

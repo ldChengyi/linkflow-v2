@@ -46,3 +46,27 @@ redis-cli: ## Open redis-cli on Redis
 
 kafka-topics: ## List Kafka topics
 	docker exec -it linkflow-redpanda rpk topic list
+
+
+.PHONY: mqtt-service fmt fmt-fix vet test ci
+
+fmt: ## Check Go formatting
+	cd service/mqtt-gateway && test -z "$$(gofmt -l .)"
+
+fmt-list: ## List unformatted Go files
+	cd service/mqtt-gateway && gofmt -l .
+
+fmt-fix: ## Format Go files
+	cd service/mqtt-gateway && gofmt -w .
+
+vet: ## Run Go vet
+	cd service/mqtt-gateway && go vet ./...
+
+test: ## Run Go tests
+	cd service/mqtt-gateway && go test ./...
+
+ci: fmt vet test ## Run local CI checks
+
+
+
+

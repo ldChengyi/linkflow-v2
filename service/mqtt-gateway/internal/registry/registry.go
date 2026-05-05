@@ -10,7 +10,7 @@ import (
 )
 
 type RouteSpec struct {
-	Name string
+	Name    string
 	Pattern string
 	Handler router.Handler
 }
@@ -18,7 +18,7 @@ type RouteSpec struct {
 func RegisterAll(r *router.Router, eb envelope.Builder, pub publisher.Publisher) error {
 	routes := []RouteSpec{
 		{
-			Name: "device.property.post",
+			Name:    "device.property.post",
 			Pattern: `^lf/v1/(?P<product_key>[^/]+)/(?P<device_id>[^/]+)/property/up/post$`,
 			Handler: handler.Property(eb, pub),
 		},

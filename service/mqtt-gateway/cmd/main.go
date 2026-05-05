@@ -17,7 +17,6 @@ import (
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/util"
 )
 
-
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
@@ -26,7 +25,7 @@ func main() {
 		log.Error("load config", "err", err)
 		os.Exit(1)
 	}
- 
+
 	kafkaClient, err := kafka.New(kafka.Options{
 		Brokers: util.SpiltCSV(cfg.KafkaBrokers),
 	}, log)

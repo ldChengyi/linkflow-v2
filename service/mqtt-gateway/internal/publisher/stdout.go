@@ -8,7 +8,6 @@ import (
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/envelope"
 )
 
-
 type Stdout struct {
 	Log *slog.Logger
 }
