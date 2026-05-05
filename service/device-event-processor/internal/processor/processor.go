@@ -36,8 +36,19 @@ type Processor interface {
 	Process(ctx context.Context, msg Message) Result
 }
 
+type EventHandler interface {
+	Handle(ctx context.Context, env *event.Envelope) Result
+}
+
+type EventHandlerFunc func(ctx context.Context, env *event.Envelope) Result
+
+func (f EventHandlerFunc) Handle(ctx context.Context, env *event.Envelope) Result {
+	return f(ctx, env)
+}
+
 type EventProcessor struct {
 	registry *schema.Registry
+	handlers map[string]EventHandler
 }
 
 func NewEventProcessor(registry *schema.Registry) (*EventProcessor, error) {
@@ -45,9 +56,17 @@ func NewEventProcessor(registry *schema.Registry) (*EventProcessor, error) {
 		return nil, errors.New("schema registry is nil")
 	}
 
-	return &EventProcessor{
+	ep := &EventProcessor{
 		registry: registry,
-	}, nil
+		handlers: make(map[string]EventHandler),
+	}
+	ep.Register(event.DeviceTelemetryReceived.Key(), EventHandlerFunc(ep.processTelemetryReceived))
+	ep.Register(event.DevicePropertySetAcknowledged.Key(), EventHandlerFunc(ep.processPropertySetAcknowledged))
+	return ep, nil
+}
+
+func (ep *EventProcessor) Register(key string, h EventHandler) {
+	ep.handlers[key] = h
 }
 
 func (ep *EventProcessor) Process(ctx context.Context, msg Message) Result {
@@ -60,20 +79,17 @@ func (ep *EventProcessor) Process(ctx context.Context, msg Message) Result {
 		return Result{Action: ActionDrop, Err: err}
 	}
 
-	base := Result{
-		EventID:  env.EventID,
-		TenantID: env.TenantID,
+	key := event.PayloadSchemaKey(env.EventType, env.EventVersion)
+	handler, ok := ep.handlers[key]
+	if !ok {
+		return Result{
+			Action:   ActionDrop,
+			EventID:  env.EventID,
+			TenantID: env.TenantID,
+			Err:      fmt.Errorf("unsupported event %s", key),
+		}
 	}
-
-	switch event.PayloadSchemaKey(env.EventType, env.EventVersion) {
-	case event.DeviceTelemetryReceived.Key():
-		return ep.processTelemetryReceived(ctx, env)
-	default:
-		base.Action = ActionDrop
-		base.Err = fmt.Errorf("unsupported event %s v%d", env.EventType, env.EventVersion)
-		return base
-	}
-
+	return handler.Handle(ctx, env)
 }
 
 func (p *EventProcessor) processTelemetryReceived(ctx context.Context, env *event.Envelope) Result {
@@ -92,6 +108,30 @@ func (p *EventProcessor) processTelemetryReceived(ctx context.Context, env *even
 	if err := json.Unmarshal(env.Payload, &payload); err != nil {
 		result.Action = ActionDrop
 		result.Err = fmt.Errorf("decode telemetry payload: %w", err)
+		return result
+	}
+
+	result.Action = ActionAck
+	result.DeviceID = payload.DeviceID
+	return result
+}
+
+func (p *EventProcessor) processPropertySetAcknowledged(ctx context.Context, env *event.Envelope) Result {
+	result := Result{
+		EventID:  env.EventID,
+		TenantID: env.TenantID,
+	}
+
+	if err := ctx.Err(); err != nil {
+		result.Action = ActionRetry
+		result.Err = err
+		return result
+	}
+
+	var payload event.PropertySetAcknowledgedPayload
+	if err := json.Unmarshal(env.Payload, &payload); err != nil {
+		result.Action = ActionDrop
+		result.Err = fmt.Errorf("decode property set acknowledged payload: %w", err)
 		return result
 	}
 

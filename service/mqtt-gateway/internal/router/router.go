@@ -2,10 +2,12 @@ package router
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log/slog"
 	"regexp"
 )
+
+var ErrNoRoute = errors.New("no route matched")
 
 // ParsedMessage is the normalized MQTT message passed to a route handler.
 //
@@ -22,7 +24,28 @@ type ParsedMessage struct {
 //
 // The context allows callers to propagate cancellation, deadlines, and request
 // scoped values through the MQTT dispatch pipeline.
-type Handler func(ctx context.Context, msg ParsedMessage) error
+type Handler interface {
+	Handle(ctx context.Context, msg ParsedMessage) error
+}
+
+// HandlerFunc adapts a function to Handler.
+type HandlerFunc func(ctx context.Context, msg ParsedMessage) error
+
+func (f HandlerFunc) Handle(ctx context.Context, msg ParsedMessage) error {
+	return f(ctx, msg)
+}
+
+// Middleware wraps a Handler with cross-cutting behavior such as logging,
+// metrics, recover, timeout, or retry.
+type Middleware func(Handler) Handler
+
+// Chain applies middleware around h. The first middleware is the outermost one.
+func Chain(h Handler, mws ...Middleware) Handler {
+	for i := len(mws) - 1; i >= 0; i-- {
+		h = mws[i](h)
+	}
+	return h
+}
 
 // route stores one registered topic matcher and the handler that should process
 // messages matching that pattern.
@@ -39,12 +62,11 @@ type route struct {
 // more specific patterns before broader fallback patterns.
 type Router struct {
 	routes []route
-	log    *slog.Logger
 }
 
-// New creates an empty Router that uses log for route and handler diagnostics.
-func New(log *slog.Logger) *Router {
-	return &Router{log: log}
+// New creates an empty Router.
+func New() *Router {
+	return &Router{}
 }
 
 // Handle registers a new MQTT topic route.
@@ -54,12 +76,12 @@ func New(log *slog.Logger) *Router {
 // ParsedMessage.Vars.
 //
 // warning: must be finished before Dispatch function call. not goroutine-safe
-func (r *Router) Handle(name, pattern string, h Handler) error {
+func (r *Router) Handle(name, pattern string, h Handler, mws ...Middleware) error {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return fmt.Errorf("router : compile %q: %w", name, err)
 	}
-	r.routes = append(r.routes, route{name: name, pattern: re, handler: h})
+	r.routes = append(r.routes, route{name: name, pattern: re, handler: Chain(h, mws...)})
 	return nil
 }
 
@@ -68,9 +90,9 @@ func (r *Router) Handle(name, pattern string, h Handler) error {
 //
 // If the matched pattern contains named capture groups, Dispatch copies those
 // captured values into ParsedMessage.Vars before invoking the handler. Handler
-// errors are logged and not returned because MQTT message delivery is normally
-// handled asynchronously by the broker client.
-func (r *Router) Dispatch(ctx context.Context, topic string, payload []byte) {
+// errors are returned so the caller can decide whether to retry, drop, or
+// dead-letter the message.
+func (r *Router) Dispatch(ctx context.Context, topic string, payload []byte) error {
 	for _, rt := range r.routes {
 		// FindStringSubmatch returns the full match plus capture-group values.
 		// A nil result means this route does not match the MQTT topic.
@@ -90,10 +112,10 @@ func (r *Router) Dispatch(ctx context.Context, topic string, payload []byte) {
 		}
 
 		msg := ParsedMessage{Topic: topic, Vars: vars, Payload: payload}
-		if err := rt.handler(ctx, msg); err != nil {
-			r.log.Error("handler failed", "router", rt.name, "topic", topic, "err", err)
+		if err := rt.handler.Handle(ctx, msg); err != nil {
+			return fmt.Errorf("handle route %q: %w", rt.name, err)
 		}
-		return
+		return nil
 	}
-	r.log.Warn("no route matched", "topic", topic)
+	return fmt.Errorf("%w: %s", ErrNoRoute, topic)
 }

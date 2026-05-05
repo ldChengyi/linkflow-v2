@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -14,11 +15,12 @@ import (
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/publisher"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/registry"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/router"
-	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/util"
 )
 
 func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -27,7 +29,7 @@ func main() {
 	}
 
 	kafkaClient, err := kafka.New(kafka.Options{
-		Brokers: util.SpiltCSV(cfg.KafkaBrokers),
+		Brokers: cfg.KafkaBrokers,
 	}, log)
 	if err != nil {
 		log.Error("create kafka client", "err", err)
@@ -42,33 +44,40 @@ func main() {
 	pub := publisher.NewKafkaEvent(kafkaClient)
 	ef := event.EnvelopeFactory{Producer: cfg.Producer, TenantID: cfg.TenantID}
 
-	r := router.New(log)
-	if err := registry.RegisterAll(r, ef, pub); err != nil {
+	r := router.New()
+	subscriptions, err := registry.RegisterAll(r, ef, pub,
+		router.Recover(log),
+		router.Logging(log),
+	)
+	if err != nil {
 		log.Error("register routes", "err", err)
 		os.Exit(1)
 	}
 
 	cli := mqtt.New(mqtt.Options{
-		BrokerURL: cfg.BrokerURL,
-		ClientID:  cfg.ClientID,
-		Username:  cfg.Username,
-		Password:  cfg.Password,
+		BrokerURL:      cfg.BrokerURL,
+		ClientID:       cfg.ClientID,
+		Username:       cfg.Username,
+		Password:       cfg.Password,
+		MessageBuffer:  cfg.MQTTMessageBuffer,
+		WorkerCount:    cfg.MQTTWorkerCount,
+		HandlerTimeout: cfg.MQTTHandlerTimeout,
 	}, r, log)
+	cli.Run(ctx)
 
-	if err := cli.Connect(10 * time.Second); err != nil {
+	if err := cli.Connect(ctx, 10*time.Second); err != nil {
 		log.Error("mqtt connect", "err", err)
 		os.Exit(1)
 	}
 	defer cli.Disconnect()
 
-	if err := cli.Subscribe("lf/v1/+/+/+/up/#", 1); err != nil {
-		log.Error("subscribe", "err", err)
-		os.Exit(1)
+	for _, sub := range subscriptions {
+		if err := cli.Subscribe(ctx, sub.Topic, sub.QOS); err != nil {
+			log.Error("subscribe", "topic", sub.Topic, "err", err)
+			os.Exit(1)
+		}
 	}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-	<-stop
+	<-ctx.Done()
 	log.Info("shutting down")
-
 }

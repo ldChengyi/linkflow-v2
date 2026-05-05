@@ -11,8 +11,13 @@ import (
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/router"
 )
 
-func Property(ef event.EnvelopeFactory, pub publisher.Publisher) router.Handler {
-	return func(ctx context.Context, msg router.ParsedMessage) error {
+// DevicePropertyPost handles device-to-cloud property post messages.
+//
+// MQTT topic shape:
+//
+//	lf/v1/{product_key}/{device_id}/property/up/post
+func DevicePropertyPost(spec event.Spec, ef event.EnvelopeFactory, pub publisher.Publisher) router.Handler {
+	return router.HandlerFunc(func(ctx context.Context, msg router.ParsedMessage) error {
 		var metrics map[string]any
 		if err := json.Unmarshal(msg.Payload, &metrics); err != nil {
 			return fmt.Errorf("decode metrics: %w", err)
@@ -24,8 +29,8 @@ func Property(ef event.EnvelopeFactory, pub publisher.Publisher) router.Handler 
 			Metrics:    metrics,
 		}
 		env, err := ef.New(
-			event.DeviceTelemetryReceived.Type,
-			event.DeviceTelemetryReceived.Version,
+			spec.Type,
+			spec.Version,
 			p,
 			time.Time{},
 		)
@@ -33,5 +38,5 @@ func Property(ef event.EnvelopeFactory, pub publisher.Publisher) router.Handler 
 			return err
 		}
 		return pub.Publish(ctx, env)
-	}
+	})
 }

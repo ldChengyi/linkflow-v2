@@ -19,10 +19,32 @@ func TestValidateEventAcceptsTelemetryReceived(t *testing.T) {
 		t.Fatalf("ValidateEvent() error = %v", err)
 	}
 
-	if got.EventType != event.TypeDeviceTelemetryReceived {
+	if got.EventType != event.DeviceTelemetryReceived.Type {
 		t.Fatalf("EventType = %q", got.EventType)
 	}
-	if got.EventVersion != event.VersionDeviceTelemetryReceived {
+	if got.EventVersion != event.DeviceTelemetryReceived.Version {
+		t.Fatalf("EventVersion = %d", got.EventVersion)
+	}
+	if len(got.Payload) == 0 {
+		t.Fatal("Payload is empty")
+	}
+}
+
+func TestValidateEventAcceptsPropertySetAcknowledged(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	env := validPropertySetAcknowledgedEvent()
+	raw := mustMarshalJSON(t, env)
+
+	got, err := registry.ValidateEvent(raw)
+	if err != nil {
+		t.Fatalf("ValidateEvent() error = %v", err)
+	}
+
+	if got.EventType != event.DevicePropertySetAcknowledged.Type {
+		t.Fatalf("EventType = %q", got.EventType)
+	}
+	if got.EventVersion != event.DevicePropertySetAcknowledged.Version {
 		t.Fatalf("EventVersion = %d", got.EventVersion)
 	}
 	if len(got.Payload) == 0 {
@@ -170,8 +192,8 @@ func newTestRegistry(t *testing.T) *Registry {
 func validTelemetryEvent() map[string]any {
 	return map[string]any{
 		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db5",
-		"event_type":    event.TypeDeviceTelemetryReceived,
-		"event_version": event.VersionDeviceTelemetryReceived,
+		"event_type":    event.DeviceTelemetryReceived.Type,
+		"event_version": event.DeviceTelemetryReceived.Version,
 		"occurred_at":   "2026-05-05T10:00:00Z",
 		"producer":      "mqtt-gateway",
 		"tenant_id":     "default",
@@ -183,6 +205,28 @@ func validTelemetryEvent() map[string]any {
 				"temperature": 23.5,
 				"online":      true,
 				"status":      "ok",
+			},
+		},
+	}
+}
+
+func validPropertySetAcknowledgedEvent() map[string]any {
+	return map[string]any{
+		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db6",
+		"event_type":    event.DevicePropertySetAcknowledged.Type,
+		"event_version": event.DevicePropertySetAcknowledged.Version,
+		"occurred_at":   "2026-05-05T10:00:00Z",
+		"producer":      "mqtt-gateway",
+		"tenant_id":     "default",
+		"payload": map[string]any{
+			"device_id":   "dev-001",
+			"product_key": "esp32",
+			"protocol":    "mqtt",
+			"success":     true,
+			"code":        "ok",
+			"message":     "applied",
+			"properties": map[string]any{
+				"led": true,
 			},
 		},
 	}

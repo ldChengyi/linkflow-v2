@@ -18,16 +18,16 @@ func (p *fakePublisher) Publish(ctx context.Context, e event.Envelope) error {
 	return nil
 }
 
-func TestPropertyPublishesTelemetryReceivedEvent(t *testing.T) {
+func TestDevicePropertyPostPublishesTelemetryReceivedEvent(t *testing.T) {
 	pub := &fakePublisher{}
 	factory := event.EnvelopeFactory{
 		Producer: "mqtt-gateway",
 		TenantID: "default",
 	}
 
-	h := Property(factory, pub)
+	h := DevicePropertyPost(event.DeviceTelemetryReceived, factory, pub)
 
-	err := h(context.Background(), router.ParsedMessage{
+	err := h.Handle(context.Background(), router.ParsedMessage{
 		Topic: "lf/v1/esp32/dev-001/property/up/post",
 		Vars: map[string]string{
 			"product_key": "esp32",
@@ -36,7 +36,7 @@ func TestPropertyPublishesTelemetryReceivedEvent(t *testing.T) {
 		Payload: []byte(`{"temperature":23.5,"online":true,"status":"ok"}`),
 	})
 	if err != nil {
-		t.Fatalf("Property() error = %v", err)
+		t.Fatalf("DevicePropertyPost() error = %v", err)
 	}
 
 	if len(pub.events) != 1 {
@@ -44,10 +44,10 @@ func TestPropertyPublishesTelemetryReceivedEvent(t *testing.T) {
 	}
 
 	env := pub.events[0]
-	if env.EventType != event.TypeDeviceTelemetryReceived {
+	if env.EventType != event.DeviceTelemetryReceived.Type {
 		t.Fatalf("EventType = %q", env.EventType)
 	}
-	if env.EventVersion != event.VersionDeviceTelemetryReceived {
+	if env.EventVersion != event.DeviceTelemetryReceived.Version {
 		t.Fatalf("EventVersion = %d", env.EventVersion)
 	}
 	if env.Producer != "mqtt-gateway" {
@@ -83,16 +83,16 @@ func TestPropertyPublishesTelemetryReceivedEvent(t *testing.T) {
 	}
 }
 
-func TestPropertyReturnsErrorForInvalidJSON(t *testing.T) {
+func TestDevicePropertyPostReturnsErrorForInvalidJSON(t *testing.T) {
 	pub := &fakePublisher{}
 	factory := event.EnvelopeFactory{
 		Producer: "mqtt-gateway",
 		TenantID: "default",
 	}
 
-	h := Property(factory, pub)
+	h := DevicePropertyPost(event.DeviceTelemetryReceived, factory, pub)
 
-	err := h(context.Background(), router.ParsedMessage{
+	err := h.Handle(context.Background(), router.ParsedMessage{
 		Topic: "lf/v1/esp32/dev-001/property/up/post",
 		Vars: map[string]string{
 			"product_key": "esp32",
@@ -101,7 +101,7 @@ func TestPropertyReturnsErrorForInvalidJSON(t *testing.T) {
 		Payload: []byte(`{bad json`),
 	})
 	if err == nil {
-		t.Fatal("Property() error is nil, want JSON decode error")
+		t.Fatal("DevicePropertyPost() error is nil, want JSON decode error")
 	}
 
 	if len(pub.events) != 0 {

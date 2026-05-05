@@ -19,8 +19,16 @@ var DeviceTelemetryReceived = Spec{
 	Topic:      TopicDeviceEventsV1,
 }
 
+var DevicePropertySetAcknowledged = Spec{
+	Type:       TypeDevicePropertySetAcknowledged,
+	Version:    VersionDevicePropertySetAcknowledged,
+	SchemaFile: PropertySetAcknowledgedV1SchemaFile,
+	Topic:      TopicDeviceEventsV1,
+}
+
 var specs = []Spec{
 	DeviceTelemetryReceived,
+	DevicePropertySetAcknowledged,
 }
 
 func Specs() []Spec {
