@@ -15,12 +15,6 @@ type Registry struct {
 	payloads map[string]*jsonschema.Schema
 }
 
-type payloadSchemaSpec struct {
-	EventType string
-	Version   int
-	File      string
-}
-
 // NewRegistry loads all event schemas from contractsFS.
 //
 // contractsFS should be rooted at the repository's contracts directory.
@@ -32,16 +26,16 @@ type payloadSchemaSpec struct {
 //
 //	os.DirFS("../../contracts")
 func NewRegistry(contractsFs fs.FS) (*Registry, error) {
-	complier := jsonschema.NewCompiler()
+	compiler := jsonschema.NewCompiler()
 
 	// Draft 2020-12 disables format assertions by default in many cases.
-	// The envelope uses uuid and date-time formats, so consumers should assert them]
+	// The envelope uses uuid and date-time formats, so consumers should assert them.
 
-	complier.AssertFormat()
+	compiler.AssertFormat()
 
-	files := []string{
-		event.EnvelopeSchemaFile,
-		event.TelemetryReceivedV1SchemaFile,
+	files := []string{event.EnvelopeSchemaFile}
+	for _, spec := range event.Specs() {
+		files = append(files, spec.SchemaFile)
 	}
 
 	for _, file := range files {
@@ -49,23 +43,23 @@ func NewRegistry(contractsFs fs.FS) (*Registry, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := complier.AddResource(file, doc); err != nil {
+		if err := compiler.AddResource(file, doc); err != nil {
 			return nil, fmt.Errorf("add schema resource %q: %w", file, err)
 		}
 	}
 
-	envelopeSchema, err := complier.Compile(event.EnvelopeSchemaFile)
+	envelopeSchema, err := compiler.Compile(event.EnvelopeSchemaFile)
 	if err != nil {
 		return nil, fmt.Errorf("compile envelope schema: %w", err)
 	}
 
 	payloads := make(map[string]*jsonschema.Schema)
-	for _, spec := range payloadSchemaSpecs() {
-		schema, err := complier.Compile(spec.File)
+	for _, spec := range event.Specs() {
+		schema, err := compiler.Compile(spec.SchemaFile)
 		if err != nil {
-			return nil, fmt.Errorf("compile payload schema %q: %w", spec.File, err)
+			return nil, fmt.Errorf("compile payload schema %q: %w", spec.SchemaFile, err)
 		}
-		payloads[event.PayloadSchemaKey(spec.EventType, spec.Version)] = schema
+		payloads[spec.Key()] = schema
 	}
 
 	return &Registry{
@@ -88,20 +82,10 @@ func loadSchema(schemaFS fs.FS, file string) (any, error) {
 	return doc, nil
 }
 
-func payloadSchemaSpecs() []payloadSchemaSpec {
-	return []payloadSchemaSpec{
-		{
-			EventType: event.TypeDeviceTelemetryReceived,
-			Version:   event.VersionDeviceTelemetryReceived,
-			File:      event.TelemetryReceivedV1SchemaFile,
-		},
-	}
-}
-
 func (r *Registry) ValidateEnvelope(raw []byte) error {
 	instance, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
-		return fmt.Errorf("decode envelop json: %w", err)
+		return fmt.Errorf("decode envelope json: %w", err)
 	}
 
 	if err := r.envelope.Validate(instance); err != nil {
@@ -115,7 +99,7 @@ func (r *Registry) ValidatePayload(eventType string, version int, raw json.RawMe
 
 	schema, ok := r.payloads[key]
 	if !ok {
-		return fmt.Errorf("unknow payload schema for %s", key)
+		return fmt.Errorf("unknown payload schema for %s", key)
 	}
 
 	instance, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))

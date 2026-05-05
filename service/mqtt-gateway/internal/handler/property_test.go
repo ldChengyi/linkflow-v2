@@ -44,10 +44,10 @@ func TestPropertyPublishesTelemetryReceivedEvent(t *testing.T) {
 	}
 
 	env := pub.events[0]
-	if env.EventType != "device.telemetry.received" {
+	if env.EventType != event.TypeDeviceTelemetryReceived {
 		t.Fatalf("EventType = %q", env.EventType)
 	}
-	if env.EventVersion != 1 {
+	if env.EventVersion != event.VersionDeviceTelemetryReceived {
 		t.Fatalf("EventVersion = %d", env.EventVersion)
 	}
 	if env.Producer != "mqtt-gateway" {
@@ -57,12 +57,7 @@ func TestPropertyPublishesTelemetryReceivedEvent(t *testing.T) {
 		t.Fatalf("TenantID = %q", env.TenantID)
 	}
 
-	var payload struct {
-		DeviceID   string         `json:"device_id"`
-		ProductKey string         `json:"product_key"`
-		Protocol   string         `json:"protocol"`
-		Metrics    map[string]any `json:"metrics"`
-	}
+	var payload event.TelemetryReceivedPayload
 
 	if err := json.Unmarshal(env.Payload, &payload); err != nil {
 		t.Fatalf("json.Unmarshal(env.Payload) error = %v", err)

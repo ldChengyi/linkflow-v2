@@ -11,26 +11,24 @@ import (
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/router"
 )
 
-type telemetryPayload struct {
-	DeviceID   string         `json:"device_id"`
-	ProductKey string         `json:"product_key"`
-	Protocol   string         `json:"protocol"`
-	Metrics    map[string]any `json:"metrics"`
-}
-
 func Property(ef event.EnvelopeFactory, pub publisher.Publisher) router.Handler {
 	return func(ctx context.Context, msg router.ParsedMessage) error {
 		var metrics map[string]any
 		if err := json.Unmarshal(msg.Payload, &metrics); err != nil {
 			return fmt.Errorf("decode metrics: %w", err)
 		}
-		p := telemetryPayload{
+		p := event.TelemetryReceivedPayload{
 			DeviceID:   msg.Vars["device_id"],
 			ProductKey: msg.Vars["product_key"],
 			Protocol:   "mqtt",
 			Metrics:    metrics,
 		}
-		env, err := ef.New("device.telemetry.received", 1, p, time.Time{})
+		env, err := ef.New(
+			event.DeviceTelemetryReceived.Type,
+			event.DeviceTelemetryReceived.Version,
+			p,
+			time.Time{},
+		)
 		if err != nil {
 			return err
 		}

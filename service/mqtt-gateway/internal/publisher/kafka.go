@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/kafka"
@@ -20,12 +19,11 @@ func NewKafkaEvent(client *kafka.Client) *KafkaEvent {
 }
 
 func topicForEvent(e event.Envelope) (string, error) {
-	switch {
-	case strings.HasPrefix(e.EventType, "device."):
-		return "lf.v1.device.events", nil
-	default:
-		return "", fmt.Errorf("unknown event domain for event_type %q", e.EventType)
+	spec, ok := event.Lookup(e.EventType, e.EventVersion)
+	if !ok {
+		return "", fmt.Errorf("unknown event %s v%d", e.EventType, e.EventVersion)
 	}
+	return spec.Topic, nil
 }
 
 func (p *KafkaEvent) Publish(ctx context.Context, e event.Envelope) error {
