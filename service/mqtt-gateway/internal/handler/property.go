@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/envelope"
+	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/publisher"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/router"
 )
@@ -18,7 +18,7 @@ type telemetryPayload struct {
 	Metrics    map[string]any `json:"metrics"`
 }
 
-func Property(b envelope.Builder, pub publisher.Publisher) router.Handler {
+func Property(ef event.EnvelopeFactory, pub publisher.Publisher) router.Handler {
 	return func(ctx context.Context, msg router.ParsedMessage) error {
 		var metrics map[string]any
 		if err := json.Unmarshal(msg.Payload, &metrics); err != nil {
@@ -30,7 +30,7 @@ func Property(b envelope.Builder, pub publisher.Publisher) router.Handler {
 			Protocol:   "mqtt",
 			Metrics:    metrics,
 		}
-		env, err := b.New("device.telemetry.received", 1, p, time.Time{})
+		env, err := ef.New("device.telemetry.received", 1, p, time.Time{})
 		if err != nil {
 			return err
 		}

@@ -1,4 +1,4 @@
-package envelope
+package event
 
 import (
 	"encoding/json"
@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-func TestBuilderNewCreatesEnvelope(t *testing.T) {
-	builder := Builder{
+func TestEnvelopeFactoryNewCreatesEnvelope(t *testing.T) {
+	factory := EnvelopeFactory{
 		Producer: "mqtt-gateway",
 		TenantID: "default",
 	}
@@ -23,9 +23,9 @@ func TestBuilderNewCreatesEnvelope(t *testing.T) {
 
 	occurredAt := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
 
-	env, err := builder.New("device.telemetry.received", 1, payload, occurredAt)
+	env, err := factory.New("device.telemetry.received", 1, payload, occurredAt)
 	if err != nil {
-		t.Fatalf("Builder.New() error = %v", err)
+		t.Fatalf("EnvelopeFactory.New() error = %v", err)
 	}
 
 	if env.EventID == "" {
@@ -56,16 +56,15 @@ func TestBuilderNewCreatesEnvelope(t *testing.T) {
 	}
 }
 
-func TestBuilderNewUsesCurrentTimeWhenOccurredAtIsZero(t *testing.T) {
-	builder := Builder{
+func TestEnvelopeFactoryNewUsesCurrentTimeWhenOccurredAtIsZero(t *testing.T) {
+	factory := EnvelopeFactory{
 		Producer: "mqtt-gateway",
 		TenantID: "default",
 	}
 
-	env, err := builder.New("device.telemetry.received", 1, map[string]any{"ok": true},
-		time.Time{})
+	env, err := factory.New("device.telemetry.received", 1, map[string]any{"ok": true}, time.Time{})
 	if err != nil {
-		t.Fatalf("Builder.New() error = %v", err)
+		t.Fatalf("EnvelopeFactory.New() error = %v", err)
 	}
 
 	if env.OccurredAt == "" {

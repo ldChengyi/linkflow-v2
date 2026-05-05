@@ -5,27 +5,27 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/envelope"
+	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/router"
 )
 
 type fakePublisher struct {
-	events []envelope.Envelope
+	events []event.Envelope
 }
 
-func (p *fakePublisher) Publish(ctx context.Context, e envelope.Envelope) error {
+func (p *fakePublisher) Publish(ctx context.Context, e event.Envelope) error {
 	p.events = append(p.events, e)
 	return nil
 }
 
 func TestPropertyPublishesTelemetryReceivedEvent(t *testing.T) {
 	pub := &fakePublisher{}
-	builder := envelope.Builder{
+	factory := event.EnvelopeFactory{
 		Producer: "mqtt-gateway",
 		TenantID: "default",
 	}
 
-	h := Property(builder, pub)
+	h := Property(factory, pub)
 
 	err := h(context.Background(), router.ParsedMessage{
 		Topic: "lf/v1/esp32/dev-001/property/up/post",
@@ -90,12 +90,12 @@ func TestPropertyPublishesTelemetryReceivedEvent(t *testing.T) {
 
 func TestPropertyReturnsErrorForInvalidJSON(t *testing.T) {
 	pub := &fakePublisher{}
-	builder := envelope.Builder{
+	factory := event.EnvelopeFactory{
 		Producer: "mqtt-gateway",
 		TenantID: "default",
 	}
 
-	h := Property(builder, pub)
+	h := Property(factory, pub)
 
 	err := h(context.Background(), router.ParsedMessage{
 		Topic: "lf/v1/esp32/dev-001/property/up/post",

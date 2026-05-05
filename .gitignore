@@ -97,7 +97,6 @@ coverage.txt
 coverage.html
 
 # Go workspace
-go.work
 go.work.sum
 
 # 依赖目录 (用 go modules 不需要 vendor)

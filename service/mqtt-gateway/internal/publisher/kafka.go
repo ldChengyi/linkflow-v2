@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/envelope"
+	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/kafka"
 )
 
@@ -19,7 +19,7 @@ func NewKafkaEvent(client *kafka.Client) *KafkaEvent {
 	return &KafkaEvent{client: client}
 }
 
-func topicForEvent(e envelope.Envelope) (string, error) {
+func topicForEvent(e event.Envelope) (string, error) {
 	switch {
 	case strings.HasPrefix(e.EventType, "device."):
 		return "lf.v1.device.events", nil
@@ -28,7 +28,7 @@ func topicForEvent(e envelope.Envelope) (string, error) {
 	}
 }
 
-func (p *KafkaEvent) Publish(ctx context.Context, e envelope.Envelope) error {
+func (p *KafkaEvent) Publish(ctx context.Context, e event.Envelope) error {
 	b, err := json.Marshal(e)
 	if err != nil {
 		return fmt.Errorf("marshal envelope: %w", err)

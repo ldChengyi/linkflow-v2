@@ -1,4 +1,4 @@
-package envelope
+package event
 
 import (
 	"encoding/json"
@@ -20,12 +20,12 @@ type Envelope struct {
 	Payload       json.RawMessage `json:"payload"`
 }
 
-type Builder struct {
+type EnvelopeFactory struct {
 	Producer string
 	TenantID string
 }
 
-func (b Builder) New(eventType string, version int, payload any, occurredAt time.Time) (Envelope, error) {
+func (ef EnvelopeFactory) New(eventType string, version int, payload any, occurredAt time.Time) (Envelope, error) {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return Envelope{}, err
@@ -34,14 +34,17 @@ func (b Builder) New(eventType string, version int, payload any, occurredAt time
 		occurredAt = time.Now().UTC()
 	}
 
-	id, _ := uuid.NewV7()
+	id, err := uuid.NewV7()
+	if err != nil {
+		return Envelope{}, err
+	}
 	return Envelope{
 		EventID:      id.String(),
 		EventType:    eventType,
 		EventVersion: version,
 		OccurredAt:   occurredAt.UTC().Format(time.RFC3339Nano),
-		Producer:     b.Producer,
-		TenantID:     b.TenantID,
+		Producer:     ef.Producer,
+		TenantID:     ef.TenantID,
 		Payload:      raw,
 	}, nil
 }

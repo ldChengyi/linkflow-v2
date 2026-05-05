@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/config"
-	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/envelope"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/kafka"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/mqtt"
 	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/publisher"
@@ -40,10 +40,10 @@ func main() {
 	}()
 
 	pub := publisher.NewKafkaEvent(kafkaClient)
-	eb := envelope.Builder{Producer: cfg.Producer, TenantID: cfg.TenantID}
+	ef := event.EnvelopeFactory{Producer: cfg.Producer, TenantID: cfg.TenantID}
 
 	r := router.New(log)
-	if err := registry.RegisterAll(r, eb, pub); err != nil {
+	if err := registry.RegisterAll(r, ef, pub); err != nil {
 		log.Error("register routes", "err", err)
 		os.Exit(1)
 	}

@@ -5,7 +5,7 @@
 COMPOSE := docker compose -f deploy/docker-compose.yml
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart logs ps clean psql redis-cli kafka-topics
+.PHONY: help up down restart logs ps clean psql redis-cli kafka-topics db-apply-timescale
 
 help: ## Show this help
 	@echo "LinkFlow v2 commands:"
@@ -47,26 +47,35 @@ redis-cli: ## Open redis-cli on Redis
 kafka-topics: ## List Kafka topics
 	docker exec -it linkflow-redpanda rpk topic list
 
+db-apply-timescale: ## Apply TimescaleDB SQL files to the existing database
+	scripts/db/apply-timescaledb.sh
 
-.PHONY: mqtt-service fmt fmt-fix vet test ci
+
+.PHONY: go fmt fmt-list fmt-fix vet test ci
+GO_FILES := $(shell find . -name '*.go' -not -path '*/vendor/*')
+GO_MODULES := pkg service/mqtt-gateway service/device-event-processor
 
 fmt: ## Check Go formatting
-	cd service/mqtt-gateway && test -z "$$(gofmt -l .)"
+	@test -z "$$(gofmt -l $(GO_FILES))"
 
 fmt-list: ## List unformatted Go files
-	cd service/mqtt-gateway && gofmt -l .
+	@gofmt -l $(GO_FILES)
 
 fmt-fix: ## Format Go files
-	cd service/mqtt-gateway && gofmt -w .
+	@gofmt -w $(GO_FILES)
 
 vet: ## Run Go vet
-	cd service/mqtt-gateway && go vet ./...
+	@for m in $(GO_MODULES); do \
+		echo "==> go vet $$m"; \
+		(cd $$m && go vet ./...); \
+	done
 
 test: ## Run Go tests
-	cd service/mqtt-gateway && go test ./...
+	@for m in $(GO_MODULES); do \
+		echo "==> go test $$m"; \
+		(cd $$m && go test ./...); \
+	done
 
 ci: fmt vet test ## Run local CI checks
-
-
 
 

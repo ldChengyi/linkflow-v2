@@ -3,11 +3,11 @@ package publisher
 import (
 	"testing"
 
-	"github.com/ldchengyi/linkflow-v2/service/mqtt-gateway/internal/envelope"
+	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
 )
 
 func TestTopicForEventRoutesDeviceEvents(t *testing.T) {
-	topic, err := topicForEvent(envelope.Envelope{
+	topic, err := topicForEvent(event.Envelope{
 		EventType: "device.telemetry.received",
 	})
 	if err != nil {
@@ -20,7 +20,7 @@ func TestTopicForEventRoutesDeviceEvents(t *testing.T) {
 }
 
 func TestTopicForEventReturnsErrorForUnknownDomain(t *testing.T) {
-	_, err := topicForEvent(envelope.Envelope{
+	_, err := topicForEvent(event.Envelope{
 		EventType: "tenant.created",
 	})
 	if err == nil {
