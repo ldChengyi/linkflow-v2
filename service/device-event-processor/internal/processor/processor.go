@@ -17,11 +17,14 @@ type Message struct {
 }
 
 type Result struct {
-	Decision messaging.Decision
-	EventID  string
-	TenantID string
-	DeviceID string
-	Err      error
+	Decision     messaging.Decision
+	EventID      string
+	EventType    string
+	EventVersion int
+	TenantID     string
+	ProductKey   string
+	DeviceID     string
+	Err          error
 }
 
 type Processor interface {
@@ -75,12 +78,27 @@ func (ep *EventProcessor) Process(ctx context.Context, msg Message) Result {
 	handler, ok := ep.handlers[key]
 	if !ok {
 		return Result{
-			Decision: messaging.DecisionDrop,
-			EventID:  env.EventID,
-			TenantID: env.TenantID,
-			Err:      fmt.Errorf("unsupported event %s", key),
+			Decision:     messaging.DecisionDrop,
+			EventID:      env.EventID,
+			EventType:    env.EventType,
+			EventVersion: env.EventVersion,
+			TenantID:     env.TenantID,
+			Err:          fmt.Errorf("unsupported event %s", key),
 		}
 	}
 
-	return handler.Handle(ctx, env)
+	result := handler.Handle(ctx, env)
+	if result.EventID == "" {
+		result.EventID = env.EventID
+	}
+	if result.EventType == "" {
+		result.EventType = env.EventType
+	}
+	if result.EventVersion == 0 {
+		result.EventVersion = env.EventVersion
+	}
+	if result.TenantID == "" {
+		result.TenantID = env.TenantID
+	}
+	return result
 }

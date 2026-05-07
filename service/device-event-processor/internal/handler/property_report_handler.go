@@ -43,8 +43,10 @@ func (h *PropertyReportHandler) Handle(ctx context.Context, env *event.Envelope)
 	}
 
 	result := processor.Result{
-		EventID:  env.EventID,
-		TenantID: env.TenantID,
+		EventID:      env.EventID,
+		EventType:    env.EventType,
+		EventVersion: env.EventVersion,
+		TenantID:     env.TenantID,
 	}
 
 	var payload event.PropertyReportedPayload
@@ -54,6 +56,7 @@ func (h *PropertyReportHandler) Handle(ctx context.Context, env *event.Envelope)
 		return result
 	}
 
+	result.ProductKey = payload.ProductKey
 	result.DeviceID = payload.DeviceID
 	if err := h.writer.SavePropertyReport(ctx, env, payload); err != nil {
 		result.Decision = messaging.DecisionRetry

@@ -12,8 +12,10 @@ type Config struct {
 	KafkaBrokers []string
 	KafkaGroupID string
 
-	ConsumerWorkers int
-	ConsumerBuffer  int
+	ConsumerWorkers      int
+	ConsumerBuffer       int
+	ConsumerMaxRetries   int
+	ConsumerRetryBackoff time.Duration
 
 	PostgresDSN             string
 	PostgresMaxOpenConns    int
@@ -40,6 +42,16 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	consumerMaxRetries, err := getEnvInt("CONSUMER_MAX_RETRIES", 3)
+	if err != nil {
+		return Config{}, err
+	}
+
+	consumerRetryBackoff, err := getEnvDuration("CONSUMER_RETRY_BACKOFF", 200*time.Millisecond)
+	if err != nil {
+		return Config{}, err
+	}
+
 	maxOpenConns, err := getEnvInt("POSTGRES_MAX_OPEN_CONNS", 10)
 	if err != nil {
 		return Config{}, err
@@ -61,10 +73,12 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		KafkaBrokers:    kafkaBrokers,
-		KafkaGroupID:    getEnv("KAFKA_GROUP_ID", "device-event-processor"),
-		ConsumerWorkers: consumerWorkers,
-		ConsumerBuffer:  consumerBuffer,
+		KafkaBrokers:         kafkaBrokers,
+		KafkaGroupID:         getEnv("KAFKA_GROUP_ID", "device-event-processor"),
+		ConsumerWorkers:      consumerWorkers,
+		ConsumerBuffer:       consumerBuffer,
+		ConsumerMaxRetries:   consumerMaxRetries,
+		ConsumerRetryBackoff: consumerRetryBackoff,
 
 		PostgresDSN: getEnv("POSTGRES_DSN",
 			"postgres://linkflow:linkflow123@127.0.0.1:5432/linkflow?sslmode=disable"),

@@ -20,4 +20,5 @@ const (
 type Result struct {
 	Decision Decision
 	Err      error
+	Fields   map[string]string
 }

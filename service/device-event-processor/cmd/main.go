@@ -86,8 +86,11 @@ func run(ctx context.Context, log *slog.Logger) error {
 	}
 
 	runner, err := messaging.NewRunner(source, processorHandler, messaging.Options{
-		Workers: cfg.ConsumerWorkers,
-		Buffer:  cfg.ConsumerBuffer,
+		Workers:      cfg.ConsumerWorkers,
+		Buffer:       cfg.ConsumerBuffer,
+		MaxRetries:   cfg.ConsumerMaxRetries,
+		RetryBackoff: cfg.ConsumerRetryBackoff,
+		Logger:       log,
 	})
 	if err != nil {
 		return fmt.Errorf("create messaging runner: %w", err)
@@ -98,6 +101,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 		"kafka_topic", event.TopicDeviceEventsV1,
 		"kafka_group_id", cfg.KafkaGroupID,
 		"workers", cfg.ConsumerWorkers,
+		"max_retries", cfg.ConsumerMaxRetries,
 	)
 
 	if err := runner.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {

@@ -24,8 +24,14 @@ func TestProcessorHandlerReturnsProcessorDecision(t *testing.T) {
 			wantErr := errors.New("processor error")
 			handler, err := NewProcessorHandler(fakeProcessor{
 				result: processor.Result{
-					Decision: tt.decision,
-					Err:      wantErr,
+					Decision:     tt.decision,
+					EventID:      "evt-1",
+					EventType:    "device.property.reported",
+					EventVersion: 1,
+					TenantID:     "default",
+					ProductKey:   "acme-thermo-v1",
+					DeviceID:     "dev-0001",
+					Err:          wantErr,
 				},
 			})
 			if err != nil {
@@ -42,6 +48,24 @@ func TestProcessorHandlerReturnsProcessorDecision(t *testing.T) {
 			}
 			if !errors.Is(got.Err, wantErr) {
 				t.Fatalf("err = %v, want %v", got.Err, wantErr)
+			}
+			if got.Fields["event_id"] != "evt-1" {
+				t.Fatalf("event_id field = %q, want evt-1", got.Fields["event_id"])
+			}
+			if got.Fields["event_type"] != "device.property.reported" {
+				t.Fatalf("event_type field = %q", got.Fields["event_type"])
+			}
+			if got.Fields["event_version"] != "1" {
+				t.Fatalf("event_version field = %q, want 1", got.Fields["event_version"])
+			}
+			if got.Fields["tenant_id"] != "default" {
+				t.Fatalf("tenant_id field = %q, want default", got.Fields["tenant_id"])
+			}
+			if got.Fields["product_key"] != "acme-thermo-v1" {
+				t.Fatalf("product_key field = %q, want acme-thermo-v1", got.Fields["product_key"])
+			}
+			if got.Fields["device_id"] != "dev-0001" {
+				t.Fatalf("device_id field = %q, want dev-0001", got.Fields["device_id"])
 			}
 		})
 	}

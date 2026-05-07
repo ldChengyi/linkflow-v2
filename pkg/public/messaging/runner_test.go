@@ -42,7 +42,7 @@ func TestRunnerCompletesDeliveryByDecision(t *testing.T) {
 					}
 					return messaging.Result{Decision: tt.decision}
 				}),
-				messaging.Options{Workers: 1, Buffer: 1},
+				messaging.Options{Workers: 1, Buffer: 1, MaxRetries: 1, RetryBackoff: time.Millisecond},
 			)
 			if err != nil {
 				t.Fatalf("NewRunner() error = %v", err)
@@ -78,6 +78,87 @@ func TestRunnerCompletesDeliveryByDecision(t *testing.T) {
 				t.Fatalf("retried = %d, want %d", delivery.retried, tt.wantRetry)
 			}
 		})
+	}
+}
+
+func TestRunnerRetriesBeforeCompletingDelivery(t *testing.T) {
+	delivery := &fakeDelivery{
+		msg:  messaging.Message{Key: []byte("k1")},
+		done: make(chan struct{}),
+	}
+	source := newFakeSource(delivery)
+
+	var calls int
+	runner, err := messaging.NewRunner(
+		source,
+		messaging.HandlerFunc(func(context.Context, messaging.Message) messaging.Result {
+			calls++
+			return messaging.Result{Decision: messaging.DecisionRetry}
+		}),
+		messaging.Options{Workers: 1, Buffer: 1, MaxRetries: 2, RetryBackoff: time.Millisecond},
+	)
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errs := make(chan error, 1)
+	go func() {
+		errs <- runner.Run(ctx)
+	}()
+
+	select {
+	case <-delivery.done:
+		cancel()
+	case <-time.After(time.Second):
+		t.Fatal("delivery was not completed")
+	}
+
+	if calls != 3 {
+		t.Fatalf("handler calls = %d, want 3", calls)
+	}
+	if delivery.retried != 1 {
+		t.Fatalf("retried = %d, want 1", delivery.retried)
+	}
+}
+
+func TestRunnerRecoversHandlerPanicAsRetry(t *testing.T) {
+	delivery := &fakeDelivery{
+		msg:  messaging.Message{Key: []byte("k1")},
+		done: make(chan struct{}),
+	}
+	source := newFakeSource(delivery)
+
+	runner, err := messaging.NewRunner(
+		source,
+		messaging.HandlerFunc(func(context.Context, messaging.Message) messaging.Result {
+			panic("boom")
+		}),
+		messaging.Options{Workers: 1, Buffer: 1, MaxRetries: 1, RetryBackoff: time.Millisecond},
+	)
+	if err != nil {
+		t.Fatalf("NewRunner() error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errs := make(chan error, 1)
+	go func() {
+		errs <- runner.Run(ctx)
+	}()
+
+	select {
+	case <-delivery.done:
+		cancel()
+	case <-time.After(time.Second):
+		t.Fatal("delivery was not completed")
+	}
+
+	if delivery.retried != 1 {
+		t.Fatalf("retried = %d, want 1", delivery.retried)
 	}
 }
 

@@ -4,26 +4,36 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
+	"time"
 )
 
 const (
-	defaultWorkers = 4
-	defaultBuffer  = 128
+	defaultWorkers      = 4
+	defaultBuffer       = 128
+	defaultMaxRetries   = 3
+	defaultRetryBackoff = 200 * time.Millisecond
 )
 
 // Options controls Runner concurrency and backpressure.
 type Options struct {
-	Workers int
-	Buffer  int
+	Workers      int
+	Buffer       int
+	MaxRetries   int
+	RetryBackoff time.Duration
+	Logger       *slog.Logger
 }
 
 // Runner receives deliveries from a Source and processes them with a Handler.
 type Runner struct {
-	source  Source
-	handler Handler
-	workers int
-	buffer  int
+	source       Source
+	handler      Handler
+	workers      int
+	buffer       int
+	maxRetries   int
+	retryBackoff time.Duration
+	log          *slog.Logger
 }
 
 // NewRunner creates a Runner with bounded workers and a bounded delivery buffer.
@@ -40,12 +50,27 @@ func NewRunner(source Source, handler Handler, opt Options, mws ...Middleware) (
 	if opt.Buffer <= 0 {
 		opt.Buffer = defaultBuffer
 	}
+	if opt.MaxRetries < 0 {
+		return nil, errors.New("messaging max retries must be non-negative")
+	}
+	if opt.MaxRetries == 0 {
+		opt.MaxRetries = defaultMaxRetries
+	}
+	if opt.RetryBackoff <= 0 {
+		opt.RetryBackoff = defaultRetryBackoff
+	}
+	if opt.Logger == nil {
+		opt.Logger = slog.Default()
+	}
 
 	return &Runner{
-		source:  source,
-		handler: Chain(handler, mws...),
-		workers: opt.Workers,
-		buffer:  opt.Buffer,
+		source:       source,
+		handler:      Chain(handler, mws...),
+		workers:      opt.Workers,
+		buffer:       opt.Buffer,
+		maxRetries:   opt.MaxRetries,
+		retryBackoff: opt.RetryBackoff,
+		log:          opt.Logger,
 	}, nil
 }
 
@@ -137,7 +162,21 @@ func (r *Runner) worker(
 }
 
 func (r *Runner) handle(ctx context.Context, delivery Delivery) error {
-	result := r.handler.Handle(ctx, delivery.Message())
+	msg := delivery.Message()
+	result := r.handleWithRecover(ctx, msg)
+	attempt := 0
+
+	for result.Decision == DecisionRetry && attempt < r.maxRetries {
+		attempt++
+		r.logCompletion("message handler requested retry", result, attempt, false)
+
+		if err := sleep(ctx, r.retryBackoff); err != nil {
+			return err
+		}
+		result = r.handleWithRecover(ctx, msg)
+	}
+
+	retryExhausted := result.Decision == DecisionRetry && attempt >= r.maxRetries
 
 	switch result.Decision {
 	case DecisionAck:
@@ -159,5 +198,56 @@ func (r *Runner) handle(ctx context.Context, delivery Delivery) error {
 		return fmt.Errorf("handler returned unknown decision %q", result.Decision)
 	}
 
+	r.logCompletion("message delivery completed", result, attempt, retryExhausted)
 	return nil
+}
+
+func (r *Runner) handleWithRecover(ctx context.Context, msg Message) (result Result) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			result = Result{
+				Decision: DecisionRetry,
+				Err:      fmt.Errorf("handler panic: %v", recovered),
+			}
+		}
+	}()
+	return r.handler.Handle(ctx, msg)
+}
+
+func (r *Runner) logCompletion(message string, result Result, retryCount int, retryExhausted bool) {
+	if r.log == nil {
+		return
+	}
+
+	attrs := []any{
+		"decision", result.Decision,
+		"retry_count", retryCount,
+	}
+	if retryExhausted {
+		attrs = append(attrs, "retry_exhausted", true)
+	}
+	for k, v := range result.Fields {
+		attrs = append(attrs, k, v)
+	}
+	if result.Err != nil {
+		attrs = append(attrs, "err", result.Err)
+	}
+
+	if result.Err != nil || retryExhausted {
+		r.log.Warn(message, attrs...)
+		return
+	}
+	r.log.Info(message, attrs...)
+}
+
+func sleep(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }

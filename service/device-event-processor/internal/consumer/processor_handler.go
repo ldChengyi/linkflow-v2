@@ -3,6 +3,7 @@ package consumer
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/ldchengyi/linkflow-v2/pkg/public/messaging"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/processor"
@@ -34,5 +35,32 @@ func (h *ProcessorHandler) Handle(ctx context.Context, msg messaging.Message) me
 	return messaging.Result{
 		Decision: result.Decision,
 		Err:      result.Err,
+		Fields:   resultFields(result),
 	}
+}
+
+func resultFields(result processor.Result) map[string]string {
+	fields := make(map[string]string, 6)
+	if result.EventID != "" {
+		fields["event_id"] = result.EventID
+	}
+	if result.EventType != "" {
+		fields["event_type"] = result.EventType
+	}
+	if result.EventVersion != 0 {
+		fields["event_version"] = strconv.Itoa(result.EventVersion)
+	}
+	if result.TenantID != "" {
+		fields["tenant_id"] = result.TenantID
+	}
+	if result.ProductKey != "" {
+		fields["product_key"] = result.ProductKey
+	}
+	if result.DeviceID != "" {
+		fields["device_id"] = result.DeviceID
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	return fields
 }
