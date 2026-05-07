@@ -2,7 +2,6 @@ package processor
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -40,12 +39,6 @@ type EventHandler interface {
 	Handle(ctx context.Context, env *event.Envelope) Result
 }
 
-type EventHandlerFunc func(ctx context.Context, env *event.Envelope) Result
-
-func (f EventHandlerFunc) Handle(ctx context.Context, env *event.Envelope) Result {
-	return f(ctx, env)
-}
-
 type EventProcessor struct {
 	validator *validation.Validator
 	handlers  map[string]EventHandler
@@ -56,17 +49,23 @@ func NewEventProcessor(validator *validation.Validator) (*EventProcessor, error)
 		return nil, errors.New("event validator is nil")
 	}
 
-	ep := &EventProcessor{
+	return &EventProcessor{
 		validator: validator,
 		handlers:  make(map[string]EventHandler),
-	}
-	ep.Register(event.DevicePropertyReported.Key(), EventHandlerFunc(ep.processPropertyReported))
-	ep.Register(event.DevicePropertySetAcknowledged.Key(), EventHandlerFunc(ep.processPropertySetAcknowledged))
-	return ep, nil
+	}, nil
 }
 
-func (ep *EventProcessor) Register(key string, h EventHandler) {
-	ep.handlers[key] = h
+func (ep *EventProcessor) Register(spec event.Spec, h EventHandler) error {
+	if h == nil {
+		return fmt.Errorf("handler for event %q is nil", spec.Key())
+	}
+
+	if _, exists := ep.handlers[spec.Key()]; exists {
+		return fmt.Errorf("handler for event %q already registered", spec.Key())
+	}
+
+	ep.handlers[spec.Key()] = h
+	return nil
 }
 
 func (ep *EventProcessor) Process(ctx context.Context, msg Message) Result {
@@ -89,53 +88,6 @@ func (ep *EventProcessor) Process(ctx context.Context, msg Message) Result {
 			Err:      fmt.Errorf("unsupported event %s", key),
 		}
 	}
+
 	return handler.Handle(ctx, env)
-}
-
-func (p *EventProcessor) processPropertyReported(ctx context.Context, env *event.Envelope) Result {
-	result := Result{
-		EventID:  env.EventID,
-		TenantID: env.TenantID,
-	}
-
-	if err := ctx.Err(); err != nil {
-		result.Action = ActionRetry
-		result.Err = err
-		return result
-	}
-
-	var payload event.PropertyReportedPayload
-	if err := json.Unmarshal(env.Payload, &payload); err != nil {
-		result.Action = ActionDrop
-		result.Err = fmt.Errorf("decode property reported payload: %w", err)
-		return result
-	}
-
-	result.Action = ActionAck
-	result.DeviceID = payload.DeviceID
-	return result
-}
-
-func (p *EventProcessor) processPropertySetAcknowledged(ctx context.Context, env *event.Envelope) Result {
-	result := Result{
-		EventID:  env.EventID,
-		TenantID: env.TenantID,
-	}
-
-	if err := ctx.Err(); err != nil {
-		result.Action = ActionRetry
-		result.Err = err
-		return result
-	}
-
-	var payload event.PropertySetAcknowledgedPayload
-	if err := json.Unmarshal(env.Payload, &payload); err != nil {
-		result.Action = ActionDrop
-		result.Err = fmt.Errorf("decode property set acknowledged payload: %w", err)
-		return result
-	}
-
-	result.Action = ActionAck
-	result.DeviceID = payload.DeviceID
-	return result
 }
