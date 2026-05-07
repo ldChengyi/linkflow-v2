@@ -27,6 +27,7 @@ type Options struct {
 	ClientID       string
 	Username       string
 	Password       string
+	CleanSession   bool
 	MessageBuffer  int
 	WorkerCount    int
 	HandlerTimeout time.Duration
@@ -64,7 +65,7 @@ func New(opt Options, d Dispatcher, log *slog.Logger) *Client {
 		SetAutoReconnect(true).
 		SetConnectRetry(true).
 		SetConnectRetryInterval(2 * time.Second).
-		SetCleanSession(false).
+		SetCleanSession(opt.CleanSession).
 		SetOrderMatters(false).
 		SetOnConnectHandler(c.onConnect).
 		SetConnectionLostHandler(func(_ paho.Client, err error) {

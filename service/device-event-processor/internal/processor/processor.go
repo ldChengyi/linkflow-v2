@@ -7,6 +7,7 @@ import (
 
 	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
 	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event/validation"
+	"github.com/ldchengyi/linkflow-v2/pkg/public/messaging"
 )
 
 type Message struct {
@@ -15,16 +16,8 @@ type Message struct {
 	Headers map[string]string
 }
 
-type Action string
-
-const (
-	ActionAck   Action = "ack"
-	ActionRetry Action = "retry"
-	ActionDrop  Action = "drop"
-)
-
 type Result struct {
-	Action   Action
+	Decision messaging.Decision
 	EventID  string
 	TenantID string
 	DeviceID string
@@ -70,19 +63,19 @@ func (ep *EventProcessor) Register(spec event.Spec, h EventHandler) error {
 
 func (ep *EventProcessor) Process(ctx context.Context, msg Message) Result {
 	if err := ctx.Err(); err != nil {
-		return Result{Action: ActionRetry, Err: err}
+		return Result{Decision: messaging.DecisionRetry, Err: err}
 	}
 
 	env, err := ep.validator.ValidateEvent(msg.Value)
 	if err != nil {
-		return Result{Action: ActionDrop, Err: err}
+		return Result{Decision: messaging.DecisionDrop, Err: err}
 	}
 
 	key := event.PayloadSchemaKey(env.EventType, env.EventVersion)
 	handler, ok := ep.handlers[key]
 	if !ok {
 		return Result{
-			Action:   ActionDrop,
+			Decision: messaging.DecisionDrop,
 			EventID:  env.EventID,
 			TenantID: env.TenantID,
 			Err:      fmt.Errorf("unsupported event %s", key),

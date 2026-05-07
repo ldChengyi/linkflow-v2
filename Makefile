@@ -5,7 +5,7 @@
 COMPOSE := docker compose -f deploy/docker-compose.yml
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart logs ps clean psql redis-cli kafka-topics db-apply-timescale
+.PHONY: help up down restart logs ps clean psql redis-cli kafka-topics db-apply-timescale service-test
 
 help: ## Show this help
 	@echo "LinkFlow v2 commands:"
@@ -50,6 +50,16 @@ kafka-topics: ## List Kafka topics
 db-apply-timescale: ## Apply TimescaleDB SQL files to the existing database
 	scripts/db/apply-timescaledb.sh
 
+service-test: ## Run mqtt-gateway and device-event-processor from the repo root
+	@echo "Starting device-event-processor and mqtt-gateway. Press Ctrl-C to stop both."
+	@set -e; \
+	( cd service/device-event-processor && env GOCACHE=/tmp/linkflow-go-build go run ./cmd ) & \
+	processor_pid=$$!; \
+	( cd service/mqtt-gateway && env GOCACHE=/tmp/linkflow-go-build MQTT_CLIENT_ID=linkflow-mqtt-gateway-service-test MQTT_CLEAN_SESSION=true go run ./cmd ) & \
+	gateway_pid=$$!; \
+	trap 'kill $$processor_pid $$gateway_pid 2>/dev/null || true' INT TERM EXIT; \
+	wait $$processor_pid $$gateway_pid
+
 
 .PHONY: go fmt fmt-list fmt-fix vet test ci
 GO_FILES := $(shell find . -name '*.go' -not -path '*/vendor/*')
@@ -77,5 +87,3 @@ test: ## Run Go tests
 	done
 
 ci: fmt vet test ## Run local CI checks
-
-

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,7 +11,10 @@ import (
 
 	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
 	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event/validation"
+	"github.com/ldchengyi/linkflow-v2/pkg/public/messaging"
+	messagingkafka "github.com/ldchengyi/linkflow-v2/pkg/public/messaging/kafka"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/config"
+	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/consumer"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/handler"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/postgres"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/processor"
@@ -67,8 +71,37 @@ func run(ctx context.Context, log *slog.Logger) error {
 		return fmt.Errorf("register property reported handler: %w", err)
 	}
 
-	log.Info("device event processor wiring ready")
+	processorHandler, err := consumer.NewProcessorHandler(eventProcessor)
+	if err != nil {
+		return fmt.Errorf("create processor messaging handler: %w", err)
+	}
 
-	<-ctx.Done()
-	return ctx.Err()
+	source, err := messagingkafka.NewSource(messagingkafka.Options{
+		Brokers: cfg.KafkaBrokers,
+		Topic:   event.TopicDeviceEventsV1,
+		GroupID: cfg.KafkaGroupID,
+	})
+	if err != nil {
+		return fmt.Errorf("create kafka source: %w", err)
+	}
+
+	runner, err := messaging.NewRunner(source, processorHandler, messaging.Options{
+		Workers: cfg.ConsumerWorkers,
+		Buffer:  cfg.ConsumerBuffer,
+	})
+	if err != nil {
+		return fmt.Errorf("create messaging runner: %w", err)
+	}
+
+	log.Info(
+		"device event processor started",
+		"kafka_topic", event.TopicDeviceEventsV1,
+		"kafka_group_id", cfg.KafkaGroupID,
+		"workers", cfg.ConsumerWorkers,
+	)
+
+	if err := runner.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("run messaging consumer: %w", err)
+	}
+	return nil
 }

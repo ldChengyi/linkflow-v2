@@ -9,12 +9,13 @@ import (
 )
 
 type Config struct {
-	BrokerURL string
-	ClientID  string
-	Username  string
-	Password  string
-	TenantID  string
-	Producer  string
+	BrokerURL    string
+	ClientID     string
+	Username     string
+	Password     string
+	CleanSession bool
+	TenantID     string
+	Producer     string
 
 	KafkaBrokers []string
 
@@ -36,6 +37,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	cleanSession, err := getEnvBool("MQTT_CLEAN_SESSION", false)
+	if err != nil {
+		return Config{}, err
+	}
 	kafkaBrokers := splitCSV(getEnv("KAFKA_BROKER_URL", "127.0.0.1:19092"))
 	if len(kafkaBrokers) == 0 {
 		return Config{}, fmt.Errorf("KAFKA_BROKER_URL is required")
@@ -46,6 +51,7 @@ func Load() (Config, error) {
 		ClientID:           getEnv("MQTT_CLIENT_ID", "linkflow-mqtt-gateway"),
 		Username:           os.Getenv("MQTT_USERNAME"),
 		Password:           os.Getenv("MQTT_PASSWORD"),
+		CleanSession:       cleanSession,
 		TenantID:           getEnv("LF_TENANT_ID", "default"),
 		Producer:           getEnv("LF_PRODUCER", "mqtt-gateway"),
 		KafkaBrokers:       kafkaBrokers,
@@ -105,6 +111,18 @@ func getEnvDuration(key string, def time.Duration) (time.Duration, error) {
 	}
 	if v <= 0 {
 		return 0, fmt.Errorf("%s must be positive", key)
+	}
+	return v, nil
+}
+
+func getEnvBool(key string, def bool) (bool, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def, nil
+	}
+	v, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a boolean: %w", key, err)
 	}
 	return v, nil
 }

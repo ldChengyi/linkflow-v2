@@ -79,6 +79,25 @@ services:
     networks:
       - linkflow
 
+  # Redpanda topic bootstrap - idempotent one-shot initializer
+  redpanda-init:
+    image: redpandadata/redpanda:v23.3.5
+    container_name: linkflow-redpanda-init
+    restart: "no"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    volumes:
+      - ./init-scripts/redpanda:/init-scripts/redpanda:ro
+    entrypoint:
+      - /bin/sh
+    command:
+      - /init-scripts/redpanda/01-create-topics.sh
+    networks:
+      - linkflow
+
   # Redpanda Console - Kafka 可视化管理界面
   # http://localhost:8080
   redpanda-console:
@@ -88,6 +107,8 @@ services:
     depends_on:
       redpanda:
         condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
     ports:
       - "8080:8080"
     environment:

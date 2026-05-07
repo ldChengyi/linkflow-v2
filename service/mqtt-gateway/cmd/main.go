@@ -59,6 +59,7 @@ func main() {
 		ClientID:       cfg.ClientID,
 		Username:       cfg.Username,
 		Password:       cfg.Password,
+		CleanSession:   cfg.CleanSession,
 		MessageBuffer:  cfg.MQTTMessageBuffer,
 		WorkerCount:    cfg.MQTTWorkerCount,
 		HandlerTimeout: cfg.MQTTHandlerTimeout,

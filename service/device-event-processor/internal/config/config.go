@@ -10,6 +10,10 @@ import (
 
 type Config struct {
 	KafkaBrokers []string
+	KafkaGroupID string
+
+	ConsumerWorkers int
+	ConsumerBuffer  int
 
 	PostgresDSN             string
 	PostgresMaxOpenConns    int
@@ -24,6 +28,16 @@ func Load() (Config, error) {
 	kafkaBrokers := splitCSV(getEnv("KAFKA_BROKERS", "127.0.0.1:19092"))
 	if len(kafkaBrokers) == 0 {
 		return Config{}, fmt.Errorf("KAFKA_BROKERS is required")
+	}
+
+	consumerWorkers, err := getEnvInt("CONSUMER_WORKERS", 4)
+	if err != nil {
+		return Config{}, err
+	}
+
+	consumerBuffer, err := getEnvInt("CONSUMER_BUFFER", 128)
+	if err != nil {
+		return Config{}, err
 	}
 
 	maxOpenConns, err := getEnvInt("POSTGRES_MAX_OPEN_CONNS", 10)
@@ -47,7 +61,10 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		KafkaBrokers: kafkaBrokers,
+		KafkaBrokers:    kafkaBrokers,
+		KafkaGroupID:    getEnv("KAFKA_GROUP_ID", "device-event-processor"),
+		ConsumerWorkers: consumerWorkers,
+		ConsumerBuffer:  consumerBuffer,
 
 		PostgresDSN: getEnv("POSTGRES_DSN",
 			"postgres://linkflow:linkflow123@127.0.0.1:5432/linkflow?sslmode=disable"),
@@ -61,6 +78,9 @@ func Load() (Config, error) {
 
 	if cfg.PostgresDSN == "" {
 		return Config{}, fmt.Errorf("POSTGRES_DSN is required")
+	}
+	if cfg.KafkaGroupID == "" {
+		return Config{}, fmt.Errorf("KAFKA_GROUP_ID is required")
 	}
 	if cfg.ContractsDir == "" {
 		return Config{}, fmt.Errorf("CONTRACTS_DIR is required")
