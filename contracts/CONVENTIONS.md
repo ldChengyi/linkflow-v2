@@ -15,7 +15,7 @@ lf.<version>.<domain>.<resource>.<action>
 Examples:
 
 ```
-lf.v1.device.telemetry.received
+lf.v1.device.property.reported
 lf.v1.device.status.changed
 lf.v1.device.command.requested
 lf.v1.alert.lifecycle.created
@@ -26,8 +26,8 @@ Rules:
 - `lf` — fixed project prefix (LinkFlow). Reserved.
 - `<version>` — major version of the event family, e.g. `v1`, `v2`. See [Versioning](#versioning).
 - `<domain>` — top-level business domain: `device`, `alert`, `rule`, `ota`, `user`.
-- `<resource>` — sub-entity inside the domain: `telemetry`, `status`, `command`.
-- `<action>` — what happened, in past tense passive voice: `received`, `changed`, `created`, `requested`.
+- `<resource>` — sub-entity inside the domain: `property`, `status`, `command`.
+- `<action>` — what happened, in past tense passive voice: `reported`, `changed`, `created`, `requested`.
 
 For domains without a natural sub-resource, use a stable resource name instead of shortening the subject. For example, use `lf.v1.alert.lifecycle.created`, not `lf.v1.alert.created`.
 
@@ -44,7 +44,7 @@ Actions describe facts that have already happened. Never use forward-looking or 
 
 Good:
 
-- `received` — telemetry has been received from a device
+- `reported` — property values have been reported by a device
 - `changed` — a status transition has occurred
 - `created` — a new entity exists
 - `requested` — a command has been requested by some actor
@@ -113,7 +113,7 @@ For example:
 
 | `event_type` | `event_version` | Payload schema |
 |---|---:|---|
-| `device.telemetry.received` | `1` | `events/device.telemetry.received.v1.schema.json` |
+| `device.property.reported` | `1` | `events/device.property.reported.v1.schema.json` |
 
 Envelope validation alone is not sufficient. It proves the common metadata shape, but it does not prove that the payload matches the event type.
 
@@ -139,7 +139,7 @@ Every schema change creates a new schema file version. Do not rewrite a released
 
 Non-breaking changes increment the schema's `event_version` integer and create a new payload schema file, but the subject stays at `v1`.
 
-Breaking changes require a new subject (`lf.v2.device.telemetry.received`) and the old subject continues to be supported until all consumers migrate.
+Breaking changes require a new subject (`lf.v2.device.property.reported`) and the old subject continues to be supported until all consumers migrate.
 
 ## Schema Files
 
@@ -148,7 +148,7 @@ Each event has a JSON Schema file under `events/`:
 ```
 events/
   envelope.schema.json
-  device.telemetry.received.v1.schema.json
+  device.property.reported.v1.schema.json
   device.status.changed.v1.schema.json
 ```
 
@@ -170,7 +170,7 @@ https://linkflow.dev/contracts/events/<subject>
 Example:
 
 ```
-https://linkflow.dev/contracts/events/lf.v1.device.telemetry.received
+https://linkflow.dev/contracts/events/lf.v1.device.property.reported
 ```
 
 ## Idempotency
@@ -194,7 +194,7 @@ A minimal valid envelope:
 ```json
 {
   "event_id": "018f0a6e-7b3e-7a7b-9c2e-9b9a0c9b9f10",
-  "event_type": "device.telemetry.received",
+  "event_type": "device.property.reported",
   "event_version": 1,
   "occurred_at": "2026-05-02T10:30:00Z",
   "producer": "ingest-gateway",
@@ -208,7 +208,7 @@ With observability:
 ```json
 {
   "event_id": "018f0a6e-7b3e-7a7b-9c2e-9b9a0c9b9f10",
-  "event_type": "device.telemetry.received",
+  "event_type": "device.property.reported",
   "event_version": 1,
   "occurred_at": "2026-05-02T10:30:00Z",
   "producer": "ingest-gateway",

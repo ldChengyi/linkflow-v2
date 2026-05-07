@@ -16,14 +16,14 @@ func TestEnvelopeFactoryNewCreatesEnvelope(t *testing.T) {
 		"device_id":   "dev-001",
 		"product_key": "esp32",
 		"protocol":    "mqtt",
-		"metrics": map[string]any{
+		"properties": map[string]any{
 			"temperature": 23.5,
 		},
 	}
 
 	occurredAt := time.Date(2026, 5, 5, 10, 0, 0, 0, time.UTC)
 
-	env, err := factory.New("device.telemetry.received", 1, payload, occurredAt)
+	env, err := factory.New("device.property.reported", 1, payload, occurredAt)
 	if err != nil {
 		t.Fatalf("EnvelopeFactory.New() error = %v", err)
 	}
@@ -31,7 +31,7 @@ func TestEnvelopeFactoryNewCreatesEnvelope(t *testing.T) {
 	if env.EventID == "" {
 		t.Fatal("EventID is empty")
 	}
-	if env.EventType != "device.telemetry.received" {
+	if env.EventType != "device.property.reported" {
 		t.Fatalf("EventType = %q", env.EventType)
 	}
 	if env.EventVersion != 1 {
@@ -62,7 +62,7 @@ func TestEnvelopeFactoryNewUsesCurrentTimeWhenOccurredAtIsZero(t *testing.T) {
 		TenantID: "default",
 	}
 
-	env, err := factory.New("device.telemetry.received", 1, map[string]any{"ok": true}, time.Time{})
+	env, err := factory.New("device.property.reported", 1, map[string]any{"ok": true}, time.Time{})
 	if err != nil {
 		t.Fatalf("EnvelopeFactory.New() error = %v", err)
 	}
@@ -79,7 +79,7 @@ func TestEnvelopeFactoryNewUsesCurrentTimeWhenOccurredAtIsZero(t *testing.T) {
 func TestEnvelopeJSONOmitEmptyFields(t *testing.T) {
 	env := Envelope{
 		EventID:      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db5",
-		EventType:    "device.telemetry.received",
+		EventType:    "device.property.reported",
 		EventVersion: 1,
 		OccurredAt:   "2026-05-05T10:00:00Z",
 		Producer:     "mqtt-gateway",

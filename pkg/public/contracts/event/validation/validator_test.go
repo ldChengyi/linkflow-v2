@@ -1,4 +1,4 @@
-package schema
+package validation
 
 import (
 	"encoding/json"
@@ -8,10 +8,10 @@ import (
 	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
 )
 
-func TestValidateEventAcceptsTelemetryReceived(t *testing.T) {
+func TestValidateEventAcceptsPropertyReported(t *testing.T) {
 	registry := newTestRegistry(t)
 
-	env := validTelemetryEvent()
+	env := validPropertyEvent()
 	raw := mustMarshalJSON(t, env)
 
 	got, err := registry.ValidateEvent(raw)
@@ -19,10 +19,10 @@ func TestValidateEventAcceptsTelemetryReceived(t *testing.T) {
 		t.Fatalf("ValidateEvent() error = %v", err)
 	}
 
-	if got.EventType != event.DeviceTelemetryReceived.Type {
+	if got.EventType != event.DevicePropertyReported.Type {
 		t.Fatalf("EventType = %q", got.EventType)
 	}
-	if got.EventVersion != event.DeviceTelemetryReceived.Version {
+	if got.EventVersion != event.DevicePropertyReported.Version {
 		t.Fatalf("EventVersion = %d", got.EventVersion)
 	}
 	if len(got.Payload) == 0 {
@@ -87,7 +87,7 @@ func TestValidateEventRejectsInvalidEnvelope(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env := validTelemetryEvent()
+			env := validPropertyEvent()
 			tt.mutate(env)
 
 			if _, err := registry.ValidateEvent(mustMarshalJSON(t, env)); err == nil {
@@ -100,7 +100,7 @@ func TestValidateEventRejectsInvalidEnvelope(t *testing.T) {
 func TestValidateEventRejectsUnknownPayloadSchema(t *testing.T) {
 	registry := newTestRegistry(t)
 
-	env := validTelemetryEvent()
+	env := validPropertyEvent()
 	env["event_version"] = 2
 
 	if _, err := registry.ValidateEvent(mustMarshalJSON(t, env)); err == nil {
@@ -108,7 +108,7 @@ func TestValidateEventRejectsUnknownPayloadSchema(t *testing.T) {
 	}
 }
 
-func TestValidateEventRejectsInvalidTelemetryPayload(t *testing.T) {
+func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 	registry := newTestRegistry(t)
 
 	tests := []struct {
@@ -120,13 +120,13 @@ func TestValidateEventRejectsInvalidTelemetryPayload(t *testing.T) {
 			payload: map[string]any{
 				"product_key": "esp32",
 				"protocol":    "mqtt",
-				"metrics": map[string]any{
+				"properties": map[string]any{
 					"temperature": 23.5,
 				},
 			},
 		},
 		{
-			name: "missing metrics",
+			name: "missing properties",
 			payload: map[string]any{
 				"device_id":   "dev-001",
 				"product_key": "esp32",
@@ -134,32 +134,32 @@ func TestValidateEventRejectsInvalidTelemetryPayload(t *testing.T) {
 			},
 		},
 		{
-			name: "empty metrics",
+			name: "empty properties",
 			payload: map[string]any{
 				"device_id":   "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
-				"metrics":     map[string]any{},
+				"properties":  map[string]any{},
 			},
 		},
 		{
-			name: "invalid metric name",
+			name: "invalid property name",
 			payload: map[string]any{
 				"device_id":   "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
-				"metrics": map[string]any{
+				"properties": map[string]any{
 					"Temperature": 23.5,
 				},
 			},
 		},
 		{
-			name: "unsupported metric value type",
+			name: "unsupported property value type",
 			payload: map[string]any{
 				"device_id":   "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
-				"metrics": map[string]any{
+				"properties": map[string]any{
 					"temperature": map[string]any{"value": 23.5},
 				},
 			},
@@ -168,7 +168,7 @@ func TestValidateEventRejectsInvalidTelemetryPayload(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env := validTelemetryEvent()
+			env := validPropertyEvent()
 			env["payload"] = tt.payload
 
 			if _, err := registry.ValidateEvent(mustMarshalJSON(t, env)); err == nil {
@@ -178,22 +178,22 @@ func TestValidateEventRejectsInvalidTelemetryPayload(t *testing.T) {
 	}
 }
 
-func newTestRegistry(t *testing.T) *Registry {
+func newTestRegistry(t *testing.T) *Validator {
 	t.Helper()
 
-	registry, err := NewRegistry(os.DirFS("../../../../contracts"))
+	registry, err := NewValidator(os.DirFS("../../../../../contracts"))
 	if err != nil {
-		t.Fatalf("NewRegistry() error = %v", err)
+		t.Fatalf("NewValidator() error = %v", err)
 	}
 
 	return registry
 }
 
-func validTelemetryEvent() map[string]any {
+func validPropertyEvent() map[string]any {
 	return map[string]any{
 		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db5",
-		"event_type":    event.DeviceTelemetryReceived.Type,
-		"event_version": event.DeviceTelemetryReceived.Version,
+		"event_type":    event.DevicePropertyReported.Type,
+		"event_version": event.DevicePropertyReported.Version,
 		"occurred_at":   "2026-05-05T10:00:00Z",
 		"producer":      "mqtt-gateway",
 		"tenant_id":     "default",
@@ -201,7 +201,7 @@ func validTelemetryEvent() map[string]any {
 			"device_id":   "dev-001",
 			"product_key": "esp32",
 			"protocol":    "mqtt",
-			"metrics": map[string]any{
+			"properties": map[string]any{
 				"temperature": 23.5,
 				"online":      true,
 				"status":      "ok",

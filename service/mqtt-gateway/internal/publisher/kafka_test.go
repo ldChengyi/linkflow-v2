@@ -8,14 +8,14 @@ import (
 
 func TestTopicForEventRoutesDeviceEvents(t *testing.T) {
 	topic, err := topicForEvent(event.Envelope{
-		EventType:    event.DeviceTelemetryReceived.Type,
-		EventVersion: event.DeviceTelemetryReceived.Version,
+		EventType:    event.DevicePropertyReported.Type,
+		EventVersion: event.DevicePropertyReported.Version,
 	})
 	if err != nil {
 		t.Fatalf("topicForEvent() error = %v", err)
 	}
 
-	if topic != event.DeviceTelemetryReceived.Topic {
+	if topic != event.DevicePropertyReported.Topic {
 		t.Fatalf("topic = %q", topic)
 	}
 }

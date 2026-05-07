@@ -18,14 +18,14 @@ func (p *fakePublisher) Publish(ctx context.Context, e event.Envelope) error {
 	return nil
 }
 
-func TestDevicePropertyPostPublishesTelemetryReceivedEvent(t *testing.T) {
+func TestDevicePropertyPostPublishesPropertyReportedEvent(t *testing.T) {
 	pub := &fakePublisher{}
 	factory := event.EnvelopeFactory{
 		Producer: "mqtt-gateway",
 		TenantID: "default",
 	}
 
-	h := DevicePropertyPost(event.DeviceTelemetryReceived, factory, pub)
+	h := DevicePropertyPost(event.DevicePropertyReported, factory, pub)
 
 	err := h.Handle(context.Background(), router.ParsedMessage{
 		Topic: "lf/v1/esp32/dev-001/property/up/post",
@@ -44,10 +44,10 @@ func TestDevicePropertyPostPublishesTelemetryReceivedEvent(t *testing.T) {
 	}
 
 	env := pub.events[0]
-	if env.EventType != event.DeviceTelemetryReceived.Type {
+	if env.EventType != event.DevicePropertyReported.Type {
 		t.Fatalf("EventType = %q", env.EventType)
 	}
-	if env.EventVersion != event.DeviceTelemetryReceived.Version {
+	if env.EventVersion != event.DevicePropertyReported.Version {
 		t.Fatalf("EventVersion = %d", env.EventVersion)
 	}
 	if env.Producer != "mqtt-gateway" {
@@ -57,7 +57,7 @@ func TestDevicePropertyPostPublishesTelemetryReceivedEvent(t *testing.T) {
 		t.Fatalf("TenantID = %q", env.TenantID)
 	}
 
-	var payload event.TelemetryReceivedPayload
+	var payload event.PropertyReportedPayload
 
 	if err := json.Unmarshal(env.Payload, &payload); err != nil {
 		t.Fatalf("json.Unmarshal(env.Payload) error = %v", err)
@@ -72,14 +72,14 @@ func TestDevicePropertyPostPublishesTelemetryReceivedEvent(t *testing.T) {
 	if payload.Protocol != "mqtt" {
 		t.Fatalf("Protocol = %q", payload.Protocol)
 	}
-	if payload.Metrics["temperature"] != 23.5 {
-		t.Fatalf("temperature = %v", payload.Metrics["temperature"])
+	if payload.Properties["temperature"] != 23.5 {
+		t.Fatalf("temperature = %v", payload.Properties["temperature"])
 	}
-	if payload.Metrics["online"] != true {
-		t.Fatalf("online = %v", payload.Metrics["online"])
+	if payload.Properties["online"] != true {
+		t.Fatalf("online = %v", payload.Properties["online"])
 	}
-	if payload.Metrics["status"] != "ok" {
-		t.Fatalf("status = %v", payload.Metrics["status"])
+	if payload.Properties["status"] != "ok" {
+		t.Fatalf("status = %v", payload.Properties["status"])
 	}
 }
 
@@ -90,7 +90,7 @@ func TestDevicePropertyPostReturnsErrorForInvalidJSON(t *testing.T) {
 		TenantID: "default",
 	}
 
-	h := DevicePropertyPost(event.DeviceTelemetryReceived, factory, pub)
+	h := DevicePropertyPost(event.DevicePropertyReported, factory, pub)
 
 	err := h.Handle(context.Background(), router.ParsedMessage{
 		Topic: "lf/v1/esp32/dev-001/property/up/post",

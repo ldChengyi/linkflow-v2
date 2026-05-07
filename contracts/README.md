@@ -10,7 +10,8 @@ contracts/
 ├── MISTAKES.md          Design issues found before the first contract cleanup
 └── events/              Event payload schemas (one file per event type)
     ├── envelope.schema.json
-    └── device.telemetry.received.v1.schema.json
+    ├── device.property.reported.v1.schema.json
+    └── device.property.set.acknowledged.v1.schema.json
 ```
 
 ## Who reads what
@@ -34,7 +35,8 @@ For example:
 
 | `event_type` | `event_version` | Payload schema |
 |---|---:|---|
-| `device.telemetry.received` | `1` | `events/device.telemetry.received.v1.schema.json` |
+| `device.property.reported` | `1` | `events/device.property.reported.v1.schema.json` |
+| `device.property.set.acknowledged` | `1` | `events/device.property.set.acknowledged.v1.schema.json` |
 
 Envelope validation alone is not enough. A valid envelope with the wrong payload is still an invalid event.
 
@@ -53,7 +55,7 @@ Schema version (`event_version` in the envelope) increments on every schema chan
 
 Schemas are intentionally language-neutral. Each service loads them with its own validator:
 
-- **Go**: `github.com/santhosh-tekuri/jsonschema/v5`
+- **Go**: `github.com/santhosh-tekuri/jsonschema/v6`
 - **Python**: `jsonschema`
 - **Rust**: `jsonschema` crate
 - **TypeScript**: `ajv`

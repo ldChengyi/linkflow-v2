@@ -25,11 +25,11 @@ type Subscription struct {
 func Routes(ef event.EnvelopeFactory, pub publisher.Publisher) []RouteSpec {
 	return []RouteSpec{
 		{
-			Event:      event.DeviceTelemetryReceived,
+			Event:      event.DevicePropertyReported,
 			MQTTFilter: "lf/v1/+/+/property/up/post",
 			QOS:        1,
 			Pattern:    `^lf/v1/(?P<product_key>[^/]+)/(?P<device_id>[^/]+)/property/up/post$`,
-			Handler:    handler.DevicePropertyPost(event.DeviceTelemetryReceived, ef, pub),
+			Handler:    handler.DevicePropertyPost(event.DevicePropertyReported, ef, pub),
 		},
 		{
 			Event:      event.DevicePropertySetAcknowledged,

@@ -12,10 +12,10 @@ func (s Spec) Key() string {
 	return PayloadSchemaKey(s.Type, s.Version)
 }
 
-var DeviceTelemetryReceived = Spec{
-	Type:       TypeDeviceTelemetryReceived,
-	Version:    VersionDeviceTelemetryReceived,
-	SchemaFile: TelemetryReceivedV1SchemaFile,
+var DevicePropertyReported = Spec{
+	Type:       TypeDevicePropertyReported,
+	Version:    VersionDevicePropertyReported,
+	SchemaFile: PropertyReportedV1SchemaFile,
 	Topic:      TopicDeviceEventsV1,
 }
 
@@ -27,7 +27,7 @@ var DevicePropertySetAcknowledged = Spec{
 }
 
 var specs = []Spec{
-	DeviceTelemetryReceived,
+	DevicePropertyReported,
 	DevicePropertySetAcknowledged,
 }
 

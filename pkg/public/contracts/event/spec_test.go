@@ -2,26 +2,26 @@ package event
 
 import "testing"
 
-func TestLookupFindsDeviceTelemetryReceived(t *testing.T) {
-	spec, ok := Lookup(TypeDeviceTelemetryReceived, VersionDeviceTelemetryReceived)
+func TestLookupFindsDevicePropertyReported(t *testing.T) {
+	spec, ok := Lookup(TypeDevicePropertyReported, VersionDevicePropertyReported)
 	if !ok {
 		t.Fatal("Lookup() ok = false")
 	}
 
-	if spec != DeviceTelemetryReceived {
+	if spec != DevicePropertyReported {
 		t.Fatalf("Lookup() = %#v", spec)
 	}
 }
 
 func TestLookupReturnsFalseForUnknownEvent(t *testing.T) {
-	if _, ok := Lookup("device.telemetry.received", 2); ok {
+	if _, ok := Lookup("device.property.reported", 2); ok {
 		t.Fatal("Lookup() ok = true, want false")
 	}
 }
 
 func TestSpecKey(t *testing.T) {
-	got := DeviceTelemetryReceived.Key()
-	want := PayloadSchemaKey(TypeDeviceTelemetryReceived, VersionDeviceTelemetryReceived)
+	got := DevicePropertyReported.Key()
+	want := PayloadSchemaKey(TypeDevicePropertyReported, VersionDevicePropertyReported)
 
 	if got != want {
 		t.Fatalf("Key() = %q, want %q", got, want)
@@ -33,7 +33,7 @@ func TestSpecsReturnsCopy(t *testing.T) {
 	got[0] = Spec{}
 
 	again := Specs()
-	if again[0] != DeviceTelemetryReceived {
+	if again[0] != DevicePropertyReported {
 		t.Fatalf("Specs() returned mutable backing slice: %#v", again[0])
 	}
 }

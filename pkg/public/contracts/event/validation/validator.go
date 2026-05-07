@@ -1,4 +1,4 @@
-package schema
+package validation
 
 import (
 	"bytes"
@@ -10,12 +10,12 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-type Registry struct {
+type Validator struct {
 	envelope *jsonschema.Schema
 	payloads map[string]*jsonschema.Schema
 }
 
-// NewRegistry loads all event schemas from contractsFS.
+// NewValidator loads all event schemas from contractsFS.
 //
 // contractsFS should be rooted at the repository's contracts directory.
 // For example:
@@ -25,7 +25,7 @@ type Registry struct {
 // or, from service/device-event-processor:
 //
 //	os.DirFS("../../contracts")
-func NewRegistry(contractsFs fs.FS) (*Registry, error) {
+func NewValidator(contractsFs fs.FS) (*Validator, error) {
 	compiler := jsonschema.NewCompiler()
 
 	// Draft 2020-12 disables format assertions by default in many cases.
@@ -62,7 +62,7 @@ func NewRegistry(contractsFs fs.FS) (*Registry, error) {
 		payloads[spec.Key()] = schema
 	}
 
-	return &Registry{
+	return &Validator{
 		envelope: envelopeSchema,
 		payloads: payloads,
 	}, nil
@@ -82,22 +82,22 @@ func loadSchema(schemaFS fs.FS, file string) (any, error) {
 	return doc, nil
 }
 
-func (r *Registry) ValidateEnvelope(raw []byte) error {
+func (v *Validator) ValidateEnvelope(raw []byte) error {
 	instance, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 	if err != nil {
 		return fmt.Errorf("decode envelope json: %w", err)
 	}
 
-	if err := r.envelope.Validate(instance); err != nil {
+	if err := v.envelope.Validate(instance); err != nil {
 		return fmt.Errorf("validate envelope: %w", err)
 	}
 	return nil
 }
 
-func (r *Registry) ValidatePayload(eventType string, version int, raw json.RawMessage) error {
+func (v *Validator) ValidatePayload(eventType string, version int, raw json.RawMessage) error {
 	key := event.PayloadSchemaKey(eventType, version)
 
-	schema, ok := r.payloads[key]
+	schema, ok := v.payloads[key]
 	if !ok {
 		return fmt.Errorf("unknown payload schema for %s", key)
 	}
@@ -118,8 +118,8 @@ func (r *Registry) ValidatePayload(eventType string, version int, raw json.RawMe
 // ValidateEvent validates the full event envelope first, then validates payload
 // by event_type + event_version. It returns the decoded envelope after both
 // schema checks pass.
-func (r *Registry) ValidateEvent(raw []byte) (*event.Envelope, error) {
-	if err := r.ValidateEnvelope(raw); err != nil {
+func (v *Validator) ValidateEvent(raw []byte) (*event.Envelope, error) {
+	if err := v.ValidateEnvelope(raw); err != nil {
 		return nil, err
 	}
 
@@ -128,7 +128,7 @@ func (r *Registry) ValidateEvent(raw []byte) (*event.Envelope, error) {
 		return nil, fmt.Errorf("decode envelope: %w", err)
 	}
 
-	if err := r.ValidatePayload(env.EventType, env.EventVersion, env.Payload); err != nil {
+	if err := v.ValidatePayload(env.EventType, env.EventVersion, env.Payload); err != nil {
 		return nil, err
 	}
 

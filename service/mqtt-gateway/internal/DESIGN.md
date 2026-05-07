@@ -3,7 +3,7 @@
 
 | 类型         | 方向        | Topic                                                         | Regex                                                                                                      | Event Type                | 发起方 | 必需性 |
 |--------------|------------|---------------------------------------------------------------|------------------------------------------------------------------------------------------------------------|---------------------------|--------|--------|
-| 属性上报     | 设备 → 云  | lf/v1/{pk}/{did}/property/up/post                             | `^lf/v1/(?P<product_key>[^/]+)/(?P<device_id>[^/]+)/property/up/post$`                                     | `device.telemetry.received` | 设备   | 必需   |
+| 属性上报     | 设备 → 云  | lf/v1/{pk}/{did}/property/up/post                             | `^lf/v1/(?P<product_key>[^/]+)/(?P<device_id>[^/]+)/property/up/post$`                                     | `device.property.reported` | 设备   | 必需   |
 | 属性上报 ack | 云 → 设备  | lf/v1/{pk}/{did}/property/down/post_reply                     | `^lf/v1/(?P<product_key>[^/]+)/(?P<device_id>[^/]+)/property/down/post_reply$`                             | -                         | 云     | 可选¹  |
 | 属性设置     | 云 → 设备  | lf/v1/{pk}/{did}/property/down/set                            | `^lf/v1/(?P<product_key>[^/]+)/(?P<device_id>[^/]+)/property/down/set$`                                    | -                         | 云     | 必需   |
 | 属性设置 ack | 设备 → 云  | lf/v1/{pk}/{did}/property/up/set_reply                        | `^lf/v1/(?P<product_key>[^/]+)/(?P<device_id>[^/]+)/property/up/set_reply$`                                | `device.property.set.acknowledged` | 设备   | 必需   |

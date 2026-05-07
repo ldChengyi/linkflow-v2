@@ -18,15 +18,15 @@ import (
 //	lf/v1/{product_key}/{device_id}/property/up/post
 func DevicePropertyPost(spec event.Spec, ef event.EnvelopeFactory, pub publisher.Publisher) router.Handler {
 	return router.HandlerFunc(func(ctx context.Context, msg router.ParsedMessage) error {
-		var metrics map[string]any
-		if err := json.Unmarshal(msg.Payload, &metrics); err != nil {
-			return fmt.Errorf("decode metrics: %w", err)
+		var properties map[string]any
+		if err := json.Unmarshal(msg.Payload, &properties); err != nil {
+			return fmt.Errorf("decode properties: %w", err)
 		}
-		p := event.TelemetryReceivedPayload{
+		p := event.PropertyReportedPayload{
 			DeviceID:   msg.Vars["device_id"],
 			ProductKey: msg.Vars["product_key"],
 			Protocol:   "mqtt",
-			Metrics:    metrics,
+			Properties: properties,
 		}
 		env, err := ef.New(
 			spec.Type,

@@ -5,7 +5,7 @@ import "fmt"
 const (
 	EnvelopeSchemaFile = "events/envelope.schema.json"
 
-	TelemetryReceivedV1SchemaFile       = "events/device.telemetry.received.v1.schema.json"
+	PropertyReportedV1SchemaFile        = "events/device.property.reported.v1.schema.json"
 	PropertySetAcknowledgedV1SchemaFile = "events/device.property.set.acknowledged.v1.schema.json"
 )
 

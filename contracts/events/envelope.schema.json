@@ -25,7 +25,7 @@
             "pattern": "^[a-z]+(\\.[a-z]+)+$",
             "minLength": 3,
             "maxLength": 128,
-            "description": "Stable business event name in dotted lowercase form, e.g. 'device.telemetry.received'. Must match the producer's intent and remain stable across schema versions."
+            "description": "Stable business event name in dotted lowercase form, e.g. 'device.property.reported'. Must match the producer's intent and remain stable across schema versions."
         },
         "event_version": {
             "type": "integer",

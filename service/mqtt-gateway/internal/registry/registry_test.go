@@ -59,7 +59,7 @@ func TestRoutesUsePublicEventSpec(t *testing.T) {
 	if len(routes) != 2 {
 		t.Fatalf("routes = %d", len(routes))
 	}
-	if routes[0].Event != event.DeviceTelemetryReceived {
+	if routes[0].Event != event.DevicePropertyReported {
 		t.Fatalf("route event = %#v", routes[0].Event)
 	}
 	if routes[1].Event != event.DevicePropertySetAcknowledged {

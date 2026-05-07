@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
-	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/schema"
+	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event/validation"
 )
 
 type Message struct {
@@ -47,20 +47,20 @@ func (f EventHandlerFunc) Handle(ctx context.Context, env *event.Envelope) Resul
 }
 
 type EventProcessor struct {
-	registry *schema.Registry
-	handlers map[string]EventHandler
+	validator *validation.Validator
+	handlers  map[string]EventHandler
 }
 
-func NewEventProcessor(registry *schema.Registry) (*EventProcessor, error) {
-	if registry == nil {
-		return nil, errors.New("schema registry is nil")
+func NewEventProcessor(validator *validation.Validator) (*EventProcessor, error) {
+	if validator == nil {
+		return nil, errors.New("event validator is nil")
 	}
 
 	ep := &EventProcessor{
-		registry: registry,
-		handlers: make(map[string]EventHandler),
+		validator: validator,
+		handlers:  make(map[string]EventHandler),
 	}
-	ep.Register(event.DeviceTelemetryReceived.Key(), EventHandlerFunc(ep.processTelemetryReceived))
+	ep.Register(event.DevicePropertyReported.Key(), EventHandlerFunc(ep.processPropertyReported))
 	ep.Register(event.DevicePropertySetAcknowledged.Key(), EventHandlerFunc(ep.processPropertySetAcknowledged))
 	return ep, nil
 }
@@ -74,7 +74,7 @@ func (ep *EventProcessor) Process(ctx context.Context, msg Message) Result {
 		return Result{Action: ActionRetry, Err: err}
 	}
 
-	env, err := ep.registry.ValidateEvent(msg.Value)
+	env, err := ep.validator.ValidateEvent(msg.Value)
 	if err != nil {
 		return Result{Action: ActionDrop, Err: err}
 	}
@@ -92,7 +92,7 @@ func (ep *EventProcessor) Process(ctx context.Context, msg Message) Result {
 	return handler.Handle(ctx, env)
 }
 
-func (p *EventProcessor) processTelemetryReceived(ctx context.Context, env *event.Envelope) Result {
+func (p *EventProcessor) processPropertyReported(ctx context.Context, env *event.Envelope) Result {
 	result := Result{
 		EventID:  env.EventID,
 		TenantID: env.TenantID,
@@ -104,10 +104,10 @@ func (p *EventProcessor) processTelemetryReceived(ctx context.Context, env *even
 		return result
 	}
 
-	var payload event.TelemetryReceivedPayload
+	var payload event.PropertyReportedPayload
 	if err := json.Unmarshal(env.Payload, &payload); err != nil {
 		result.Action = ActionDrop
-		result.Err = fmt.Errorf("decode telemetry payload: %w", err)
+		result.Err = fmt.Errorf("decode property reported payload: %w", err)
 		return result
 	}
 
