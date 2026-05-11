@@ -63,7 +63,8 @@ service-test: ## Run mqtt-gateway and device-event-processor from the repo root
 
 .PHONY: go fmt fmt-list fmt-fix vet test ci
 GO_FILES := $(shell find . -name '*.go' -not -path '*/vendor/*')
-GO_MODULES := pkg service/mqtt-gateway service/device-event-processor
+GO_MODULES := pkg service/mqtt-gateway service/device-event-processor service/backend
+GO_ENV := env GOCACHE=/tmp/linkflow-go-build
 
 fmt: ## Check Go formatting
 	@test -z "$$(gofmt -l $(GO_FILES))"
@@ -77,13 +78,13 @@ fmt-fix: ## Format Go files
 vet: ## Run Go vet
 	@for m in $(GO_MODULES); do \
 		echo "==> go vet $$m"; \
-		(cd $$m && go vet ./...); \
+		(cd $$m && $(GO_ENV) go vet ./...); \
 	done
 
 test: ## Run Go tests
 	@for m in $(GO_MODULES); do \
 		echo "==> go test $$m"; \
-		(cd $$m && go test ./...); \
+		(cd $$m && $(GO_ENV) go test ./...); \
 	done
 
 ci: fmt vet test ## Run local CI checks
