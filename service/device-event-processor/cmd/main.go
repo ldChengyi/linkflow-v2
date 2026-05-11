@@ -13,10 +13,10 @@ import (
 	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event/validation"
 	"github.com/ldchengyi/linkflow-v2/pkg/public/messaging"
 	messagingkafka "github.com/ldchengyi/linkflow-v2/pkg/public/messaging/kafka"
+	"github.com/ldchengyi/linkflow-v2/pkg/public/postgres"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/config"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/consumer"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/handler"
-	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/postgres"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/processor"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/store"
 )
