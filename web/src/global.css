@@ -1,0 +1,38 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-linkflow-page: #f7f9fc;
+  --color-linkflow-page-tint: rgba(18, 137, 153, 0.1);
+  --color-linkflow-panel: #ffffff;
+
+  --color-linkflow-text: #172033;
+  --color-linkflow-muted: #4f5f73;
+  --color-linkflow-subtle: #5d6c80;
+
+  --color-linkflow-border: #dfe7f3;
+  --color-linkflow-border-strong: #d6deea;
+
+  --color-linkflow-primary: #128999;
+  --color-linkflow-primary-hover: #0f6f7d;
+  --color-linkflow-primary-soft: rgba(18, 137, 153, 0.16);
+
+  --color-linkflow-code: #101827;
+  --color-linkflow-code-text: #e6edf7;
+
+  --color-linkflow-dark-page: #0b1020;
+  --color-linkflow-dark-page-tint: rgba(45, 212, 191, 0.12);
+  --color-linkflow-dark-panel: #111827;
+
+  --color-linkflow-dark-text: #e6edf7;
+  --color-linkflow-dark-muted: #a8b3c7;
+  --color-linkflow-dark-subtle: #8996ad;
+
+  --color-linkflow-dark-border: #263449;
+  --color-linkflow-dark-border-strong: #33445f;
+
+  --color-linkflow-dark-primary: #5eead4;
+  --color-linkflow-dark-primary-hover: #2dd4bf;
+  --color-linkflow-dark-primary-soft: rgba(94, 234, 212, 0.16);
+}
