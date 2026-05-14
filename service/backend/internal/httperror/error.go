@@ -21,6 +21,7 @@ var (
 	ErrInvalidCredentials  = New(http.StatusUnauthorized, "invalid_credentials", "invalid credentials")
 	ErrUserAlreadyExists   = New(http.StatusConflict, "user_already_exists", "user already exists")
 	ErrUserDisabled        = New(http.StatusForbidden, "user_disabled", "user is disabled")
+	ErrTenantAlreadyExists = New(http.StatusConflict, "tenant_already_exists", "tenant already exists")
 	ErrMethodNotAllowed    = New(http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	ErrContentTypeRequired = New(http.StatusUnsupportedMediaType, "content_type_required", "content type must be application/json")
 )

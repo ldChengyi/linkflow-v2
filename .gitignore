@@ -173,6 +173,21 @@ out/
 .cache/
 .parcel-cache/
 
+# LinkFlow web / Umi Max generated files
+web/node_modules/
+web/dist/
+web/.turbopack/
+web/.mfsu/
+web/.umi/
+web/.umi-production/
+web/.umi-test/
+web/src/.umi/
+web/src/.umi-production/
+web/src/.umi-test/
+web/.umirc.local.ts
+web/config/config.local.ts
+web/.env.local
+
 # 类型检查
 *.tsbuildinfo
 

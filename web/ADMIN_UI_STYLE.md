@@ -65,6 +65,7 @@ Current admin route model:
 
 - `/admin`: overview
 - `/admin/tenants`: tenant management parent route
+- `/admin/audit-logs`: audit log list route
 - `/admin/device-management`: device management parent route
 - `/admin/settings`: settings route
 

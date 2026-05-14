@@ -9,3 +9,10 @@ export interface ApiRequestOptions {
   data?: unknown;
   params?: Record<string, unknown>;
 }
+
+export interface PageResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+}

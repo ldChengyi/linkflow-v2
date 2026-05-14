@@ -29,6 +29,13 @@ export default defineConfig({
       wrappers: ['@/wrappers/AuthGuard'],
     },
     {
+      name: '审计日志',
+      path: '/admin/audit-logs',
+      component: './Admin',
+      layout: false,
+      wrappers: ['@/wrappers/AuthGuard'],
+    },
+    {
       name: '设备管理',
       path: '/admin/device-management',
       component: './Admin',

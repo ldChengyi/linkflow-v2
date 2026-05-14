@@ -14,7 +14,10 @@ import (
 
 type Options struct {
 	Auth         *handler.AuthHandler
+	Tenant       *handler.TenantHandler
+	AuditLog     *handler.AuditHandler
 	Authenticate middleware.Middleware
+	Audit        middleware.Middleware
 }
 
 func New(cfg config.Config, log *slog.Logger, opt Options) (*http.Server, error) {
@@ -26,12 +29,20 @@ func New(cfg config.Config, log *slog.Logger, opt Options) (*http.Server, error)
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", health)
-	mux.HandleFunc("GET /api/v1/healthz", health)
-	mux.HandleFunc("GET /internal/emqx/healthz", health)
+	routes := newRouteRecorder(mux)
+	routes.HandleFunc("GET /healthz", health)
+	routes.HandleFunc("GET /api/v1/healthz", health)
+	routes.HandleFunc("GET /internal/emqx/healthz", health)
 	if opt.Auth != nil {
-		opt.Auth.RegisterRoutes(mux, opt.Authenticate)
+		opt.Auth.RegisterRoutes(routes, opt.Authenticate)
 	}
+	if opt.Tenant != nil {
+		opt.Tenant.RegisterRoutes(routes, opt.Authenticate, opt.Audit)
+	}
+	if opt.AuditLog != nil {
+		opt.AuditLog.RegisterRoutes(routes, opt.Authenticate)
+	}
+	routes.Log(log)
 
 	handler := middleware.Chain(
 		mux,

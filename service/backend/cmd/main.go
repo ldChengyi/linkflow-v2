@@ -101,10 +101,37 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create auth handler: %w", err)
 	}
+	tenantStore, err := store.NewPostgresTenantStore(postgresPool)
+	if err != nil {
+		return fmt.Errorf("create tenant store: %w", err)
+	}
+	tenantService, err := service.NewTenantService(tenantStore)
+	if err != nil {
+		return fmt.Errorf("create tenant service: %w", err)
+	}
+	tenantHandler, err := handler.NewTenantHandler(tenantService, log)
+	if err != nil {
+		return fmt.Errorf("create tenant handler: %w", err)
+	}
+	auditStore, err := store.NewPostgresAuditStore(postgresPool)
+	if err != nil {
+		return fmt.Errorf("create audit store: %w", err)
+	}
+	auditService, err := service.NewAuditService(auditStore)
+	if err != nil {
+		return fmt.Errorf("create audit service: %w", err)
+	}
+	auditHandler, err := handler.NewAuditHandler(auditService, log)
+	if err != nil {
+		return fmt.Errorf("create audit handler: %w", err)
+	}
 
 	httpServer, err := server.New(cfg, log, server.Options{
 		Auth:         authHandler,
+		Tenant:       tenantHandler,
+		AuditLog:     auditHandler,
 		Authenticate: middleware.Authenticate(tokenManager, sessionStore),
+		Audit:        middleware.Audit(auditService, log),
 	})
 	if err != nil {
 		return fmt.Errorf("create http server: %w", err)

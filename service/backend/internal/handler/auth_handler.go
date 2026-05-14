@@ -36,7 +36,7 @@ func NewAuthHandler(service *service.AuthService, log *slog.Logger) (*AuthHandle
 	return &AuthHandler{service: service, log: log}, nil
 }
 
-func (h *AuthHandler) RegisterRoutes(mux *http.ServeMux, authenticate func(http.Handler) http.Handler) {
+func (h *AuthHandler) RegisterRoutes(mux RouteRegistrar, authenticate func(http.Handler) http.Handler) {
 	mux.HandleFunc("POST /api/v1/auth/register", h.register)
 	mux.HandleFunc("POST /api/v1/auth/login", h.login)
 	if authenticate != nil {

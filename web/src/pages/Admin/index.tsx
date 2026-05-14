@@ -2,16 +2,14 @@ import { useI18n } from '@/contexts/I18nContext';
 import { useTheme } from '@/contexts/ThemeContext';
 import type { AdminMessageKey } from '@/i18n/admin';
 import type { AppLocale } from '@/i18n/auth';
-import {
-  type AdminSectionId,
-  useAdminUiStore,
-} from '@/stores/adminUiStore';
+import { type AdminSectionId, useAdminUiStore } from '@/stores/adminUiStore';
 import { useAuthStore } from '@/stores/authStore';
 import {
-  DashboardOutlined,
   CloseOutlined,
+  DashboardOutlined,
   DatabaseOutlined,
   DeploymentUnitOutlined,
+  FileSearchOutlined,
   GlobalOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
@@ -23,6 +21,8 @@ import {
 import { Link, history, useLocation } from '@umijs/max';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
+import AuditLogManagement from './AuditLogManagement';
+import TenantManagement from './TenantManagement';
 
 interface NavItem {
   icon: React.ReactNode;
@@ -56,6 +56,12 @@ const navItems: NavItem[] = [
     id: 'tenants',
     labelKey: 'adminTenantsNav',
     path: '/admin/tenants',
+  },
+  {
+    icon: <FileSearchOutlined aria-hidden="true" />,
+    id: 'auditLogs',
+    labelKey: 'adminAuditLogsNav',
+    path: '/admin/audit-logs',
   },
   {
     icon: <DatabaseOutlined aria-hidden="true" />,
@@ -102,6 +108,12 @@ const sectionContent: Record<AdminSectionId, SectionContent> = {
     summaryKey: 'adminTenantsSummary',
     contentKey: 'adminTenantsContent',
   },
+  auditLogs: {
+    id: 'auditLogs',
+    titleKey: 'adminAuditLogsTitle',
+    summaryKey: 'adminAuditLogsSummary',
+    contentKey: 'adminAuditLogsContent',
+  },
   deviceManagement: {
     id: 'deviceManagement',
     titleKey: 'adminDeviceManagementTitle',
@@ -119,6 +131,10 @@ const sectionContent: Record<AdminSectionId, SectionContent> = {
 const getActiveSectionId = (pathname: string): AdminSectionId => {
   if (pathname.startsWith('/admin/tenants')) {
     return 'tenants';
+  }
+
+  if (pathname.startsWith('/admin/audit-logs')) {
+    return 'auditLogs';
   }
 
   if (pathname.startsWith('/admin/device-management')) {
@@ -229,10 +245,9 @@ const AdminPage = () => {
           </div>
 
           <nav
-            className={[
-              'grid gap-2',
-              sidebarExpanded ? 'w-full' : '',
-            ].join(' ')}
+            className={['grid gap-2', sidebarExpanded ? 'w-full' : ''].join(
+              ' ',
+            )}
             aria-label={t('adminConsole')}
           >
             {navItems.map((item) => {
@@ -339,7 +354,10 @@ const AdminPage = () => {
                 )}
               </button>
               <div className="relative inline-flex h-11 items-center rounded-md border border-linkflow-border bg-white text-linkflow-muted transition focus-within:border-linkflow-primary hover:border-linkflow-primary hover:text-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-muted dark:focus-within:border-linkflow-dark-primary dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary">
-                <GlobalOutlined className="pointer-events-none absolute left-3" aria-hidden="true" />
+                <GlobalOutlined
+                  className="pointer-events-none absolute left-3"
+                  aria-hidden="true"
+                />
                 <select
                   aria-label={t('adminLanguage')}
                   className="h-full appearance-none rounded-md bg-transparent pl-9 pr-7 text-sm font-semibold outline-none"
@@ -421,84 +439,100 @@ const AdminPage = () => {
                 exit={reduceMotion ? undefined : { opacity: 0, y: -8 }}
                 transition={{ duration: 0.18, ease: 'easeOut' }}
               >
-                <section className="mb-6">
-                  <p className="m-0 text-sm font-bold uppercase text-linkflow-primary">
-                    {t('adminDashboardEyebrow')}
-                  </p>
-                  <h2 className="m-0 mt-2 text-[clamp(2rem,5vw,3.5rem)] font-bold leading-none tracking-normal">
-                    {t(activeContent.titleKey)}
-                  </h2>
-                  {t(activeContent.summaryKey) !== '' ? (
-                    <p className="m-0 mt-5 max-w-3xl text-base leading-7 text-linkflow-muted dark:text-linkflow-dark-muted sm:text-[17px]">
-                      {t(activeContent.summaryKey)}
+                {activeContent.id === 'tenants' ||
+                activeContent.id === 'auditLogs' ? null : (
+                  <section className="mb-6">
+                    <p className="m-0 text-sm font-bold uppercase text-linkflow-primary">
+                      {t('adminDashboardEyebrow')}
                     </p>
-                  ) : null}
-                </section>
-
-                <section
-                  className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
-                  aria-label={t('adminOverviewTitle')}
-                >
-                  {metrics.map((item) => (
-                    <article
-                      key={item.labelKey}
-                      className="min-h-32 rounded-lg border border-linkflow-border bg-white p-5 shadow-[0_8px_24px_rgba(23,32,51,0.06)] dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:shadow-black/20"
-                    >
-                      <p className="m-0 text-sm font-bold text-linkflow-subtle dark:text-linkflow-dark-subtle">
-                        {t(item.labelKey)}
+                    <h2 className="m-0 mt-2 text-[clamp(2rem,5vw,3.5rem)] font-bold leading-none tracking-normal">
+                      {t(activeContent.titleKey)}
+                    </h2>
+                    {t(activeContent.summaryKey) !== '' ? (
+                      <p className="m-0 mt-5 max-w-3xl text-base leading-7 text-linkflow-muted dark:text-linkflow-dark-muted sm:text-[17px]">
+                        {t(activeContent.summaryKey)}
                       </p>
-                      <strong className="mt-3 block text-4xl leading-none">
-                        {item.value}
-                      </strong>
-                      <p className="m-0 mt-3 leading-6 text-linkflow-subtle dark:text-linkflow-dark-subtle">
-                        {t(item.descriptionKey)}
-                      </p>
-                    </article>
-                  ))}
-                </section>
-
-                <section className="mt-8" aria-labelledby="admin-entry-title">
-                  <h3
-                    id="admin-entry-title"
-                    className="m-0 mb-4 text-xl font-bold leading-tight"
-                  >
-                    {t('adminEntryTitle')}
-                  </h3>
-                  <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
-                    {navItems.slice(1).map((item) => (
-                      <Link
-                        key={item.id}
-                        to={item.path}
-                        onClick={() => addVisitedTab(item.id)}
-                        className="block min-h-36 rounded-lg border border-linkflow-border bg-white p-5 text-linkflow-text no-underline shadow-[0_8px_24px_rgba(23,32,51,0.06)] transition hover:-translate-y-0.5 hover:border-linkflow-primary hover:text-linkflow-text hover:shadow-[0_12px_30px_rgba(18,137,153,0.14)] dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-text dark:shadow-black/20 dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-text dark:hover:shadow-linkflow-dark-primary-soft"
-                      >
-                        <span className="mb-4 grid h-10 w-10 place-items-center rounded-md bg-linkflow-primary-soft text-xl text-linkflow-primary">
-                          {item.icon}
-                        </span>
-                        <span className="block text-lg font-bold">
-                          {t(item.labelKey)}
-                        </span>
-                        {item.id === 'settings' ? null : (
-                          <p className="m-0 mt-3 leading-7 text-linkflow-subtle dark:text-linkflow-dark-subtle">
-                            {item.id === 'tenants'
-                              ? t('adminEntryTenantsDescription')
-                              : t('adminEntryDeviceManagementDescription')}
-                          </p>
-                        )}
-                      </Link>
-                    ))}
-                  </div>
-                </section>
-
-                {activeContent.id === 'settings' ? null : (
-                  <section className="mt-8 rounded-lg border border-linkflow-border bg-white p-5 shadow-[0_8px_24px_rgba(23,32,51,0.06)] dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:shadow-black/20">
-                    <h3 className="m-0 text-lg font-bold">
-                      {t('adminContentAreaTitle')}
-                    </h3>
-                    <p className="m-0 mt-3 max-w-3xl leading-7 text-linkflow-subtle dark:text-linkflow-dark-subtle">
-                      {t(activeContent.contentKey)}
-                    </p>
+                    ) : null}
                   </section>
+                )}
+
+                {activeContent.id === 'tenants' ? (
+                  <TenantManagement />
+                ) : activeContent.id === 'auditLogs' ? (
+                  <AuditLogManagement />
+                ) : (
+                  <>
+                    <section
+                      className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]"
+                      aria-label={t('adminOverviewTitle')}
+                    >
+                      {metrics.map((item) => (
+                        <article
+                          key={item.labelKey}
+                          className="min-h-32 rounded-lg border border-linkflow-border bg-white p-5 shadow-[0_8px_24px_rgba(23,32,51,0.06)] dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:shadow-black/20"
+                        >
+                          <p className="m-0 text-sm font-bold text-linkflow-subtle dark:text-linkflow-dark-subtle">
+                            {t(item.labelKey)}
+                          </p>
+                          <strong className="mt-3 block text-4xl leading-none">
+                            {item.value}
+                          </strong>
+                          <p className="m-0 mt-3 leading-6 text-linkflow-subtle dark:text-linkflow-dark-subtle">
+                            {t(item.descriptionKey)}
+                          </p>
+                        </article>
+                      ))}
+                    </section>
+
+                    <section
+                      className="mt-8"
+                      aria-labelledby="admin-entry-title"
+                    >
+                      <h3
+                        id="admin-entry-title"
+                        className="m-0 mb-4 text-xl font-bold leading-tight"
+                      >
+                        {t('adminEntryTitle')}
+                      </h3>
+                      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+                        {navItems.slice(1).map((item) => (
+                          <Link
+                            key={item.id}
+                            to={item.path}
+                            onClick={() => addVisitedTab(item.id)}
+                            className="block min-h-36 rounded-lg border border-linkflow-border bg-white p-5 text-linkflow-text no-underline shadow-[0_8px_24px_rgba(23,32,51,0.06)] transition hover:-translate-y-0.5 hover:border-linkflow-primary hover:text-linkflow-text hover:shadow-[0_12px_30px_rgba(18,137,153,0.14)] dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-text dark:shadow-black/20 dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-text dark:hover:shadow-linkflow-dark-primary-soft"
+                          >
+                            <span className="mb-4 grid h-10 w-10 place-items-center rounded-md bg-linkflow-primary-soft text-xl text-linkflow-primary">
+                              {item.icon}
+                            </span>
+                            <span className="block text-lg font-bold">
+                              {t(item.labelKey)}
+                            </span>
+                            {item.id === 'settings' ? null : (
+                              <p className="m-0 mt-3 leading-7 text-linkflow-subtle dark:text-linkflow-dark-subtle">
+                                {item.id === 'tenants'
+                                  ? t('adminEntryTenantsDescription')
+                                  : item.id === 'auditLogs'
+                                  ? t('adminEntryAuditLogsDescription')
+                                  : t('adminEntryDeviceManagementDescription')}
+                              </p>
+                            )}
+                          </Link>
+                        ))}
+                      </div>
+                    </section>
+
+                    {activeContent.id === 'settings' ? null : (
+                      <section className="mt-8 rounded-lg border border-linkflow-border bg-white p-5 shadow-[0_8px_24px_rgba(23,32,51,0.06)] dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:shadow-black/20">
+                        <h3 className="m-0 text-lg font-bold">
+                          {t('adminContentAreaTitle')}
+                        </h3>
+                        <p className="m-0 mt-3 max-w-3xl leading-7 text-linkflow-subtle dark:text-linkflow-dark-subtle">
+                          {t(activeContent.contentKey)}
+                        </p>
+                      </section>
+                    )}
+                  </>
                 )}
               </motion.section>
             </AnimatePresence>
