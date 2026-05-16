@@ -11,14 +11,14 @@ import (
 )
 
 type PostgresTenantStore struct {
-	pool *pgxpool.Pool
+	actor actorRLSStore
 }
 
 func NewPostgresTenantStore(pool *pgxpool.Pool) (*PostgresTenantStore, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("postgres pool is nil")
 	}
-	return &PostgresTenantStore{pool: pool}, nil
+	return &PostgresTenantStore{actor: newActorRLSStore(pool, "tenant")}, nil
 }
 
 func (s *PostgresTenantStore) CreateTenant(ctx context.Context, in service.TenantCreateInput) (service.Tenant, error) {
@@ -193,5 +193,5 @@ func (s *PostgresTenantStore) DeleteTenant(ctx context.Context, in service.Tenan
 }
 
 func (s *PostgresTenantStore) withTenantUser(ctx context.Context, userID string, fn func(pgx.Tx) error) error {
-	return withRLSUser(ctx, s.pool, userID, "tenant", fn)
+	return s.actor.withActor(ctx, userID, fn)
 }

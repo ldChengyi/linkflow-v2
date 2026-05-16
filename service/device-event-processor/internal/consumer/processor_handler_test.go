@@ -30,7 +30,7 @@ func TestProcessorHandlerReturnsProcessorDecision(t *testing.T) {
 					EventVersion: 1,
 					TenantID:     "default",
 					ProductKey:   "acme-thermo-v1",
-					DeviceID:     "dev-0001",
+					DeviceSlug:   "dev-0001",
 					Err:          wantErr,
 				},
 			})
@@ -64,8 +64,8 @@ func TestProcessorHandlerReturnsProcessorDecision(t *testing.T) {
 			if got.Fields["product_key"] != "acme-thermo-v1" {
 				t.Fatalf("product_key field = %q, want acme-thermo-v1", got.Fields["product_key"])
 			}
-			if got.Fields["device_id"] != "dev-0001" {
-				t.Fatalf("device_id field = %q, want dev-0001", got.Fields["device_id"])
+			if got.Fields["device_slug"] != "dev-0001" {
+				t.Fatalf("device_slug field = %q, want dev-0001", got.Fields["device_slug"])
 			}
 		})
 	}

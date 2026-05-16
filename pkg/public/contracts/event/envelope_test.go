@@ -13,7 +13,7 @@ func TestEnvelopeFactoryNewCreatesEnvelope(t *testing.T) {
 	}
 
 	payload := map[string]any{
-		"device_id":   "dev-001",
+		"device_slug": "dev-001",
 		"product_key": "esp32",
 		"protocol":    "mqtt",
 		"properties": map[string]any{
@@ -51,8 +51,8 @@ func TestEnvelopeFactoryNewCreatesEnvelope(t *testing.T) {
 	if err := json.Unmarshal(env.Payload, &gotPayload); err != nil {
 		t.Fatalf("json.Unmarshal(env.Payload) error = %v", err)
 	}
-	if gotPayload["device_id"] != "dev-001" {
-		t.Fatalf("payload device_id = %v", gotPayload["device_id"])
+	if gotPayload["device_slug"] != "dev-001" {
+		t.Fatalf("payload device_slug = %v", gotPayload["device_slug"])
 	}
 }
 

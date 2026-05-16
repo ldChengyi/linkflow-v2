@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS device_property_report_events (
     event_id uuid NOT NULL,
     tenant_id text NOT NULL,
     product_key text NOT NULL,
-    device_id text NOT NULL,
+    device_slug text NOT NULL,
     protocol text NOT NULL,
     occurred_at timestamptz NOT NULL,
     received_at timestamptz NOT NULL DEFAULT now(),
@@ -40,11 +40,13 @@ SELECT create_hypertable(
     if_not_exists => TRUE
 );
 
-CREATE INDEX IF NOT EXISTS idx_device_property_report_events_device_time
+DROP INDEX IF EXISTS idx_device_property_report_events_device_time;
+
+CREATE INDEX IF NOT EXISTS idx_device_property_report_events_device_slug_time
     ON device_property_report_events (
         tenant_id,
         product_key,
-        device_id,
+        device_slug,
         occurred_at DESC
     );
 

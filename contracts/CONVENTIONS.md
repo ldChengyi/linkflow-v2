@@ -34,7 +34,7 @@ For domains without a natural sub-resource, use a stable resource name instead o
 Subjects MUST NOT contain:
 
 - tenant identifiers (`tenant_id` belongs in the payload)
-- device identifiers (`device_id` belongs in the payload)
+- device slugs (`device_slug` belongs in the payload)
 - environment names (`prod`, `staging` — handled by deployment, not subject)
 - timestamps
 
@@ -64,7 +64,7 @@ Each state transition should produce its own event. Do not collapse multiple tra
 
 - All field names use `snake_case`.
 - Time fields end in `_at` (e.g. `occurred_at`, `created_at`).
-- ID fields end in `_id` (e.g. `event_id`, `device_id`, `tenant_id`).
+- ID fields end in `_id` (e.g. `event_id`, `tenant_id`). Platform-facing device identifiers use `device_slug`.
 - Boolean fields are positive statements, not negations (`is_active`, not `is_not_inactive`).
 
 ## Time Format

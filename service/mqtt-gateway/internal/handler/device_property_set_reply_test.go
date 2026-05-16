@@ -22,7 +22,7 @@ func TestDevicePropertySetReplyPublishesAcknowledgedEvent(t *testing.T) {
 		Topic: "lf/v1/esp32/dev-001/property/up/set_reply",
 		Vars: map[string]string{
 			"product_key": "esp32",
-			"device_id":   "dev-001",
+			"device_slug": "dev-001",
 		},
 		Payload: []byte(`{"success":true,"code":"ok","message":"applied","properties":{"led":true}}`),
 	})
@@ -47,8 +47,8 @@ func TestDevicePropertySetReplyPublishesAcknowledgedEvent(t *testing.T) {
 		t.Fatalf("json.Unmarshal(env.Payload) error = %v", err)
 	}
 
-	if payload.DeviceID != "dev-001" {
-		t.Fatalf("DeviceID = %q", payload.DeviceID)
+	if payload.DeviceSlug != "dev-001" {
+		t.Fatalf("DeviceSlug = %q", payload.DeviceSlug)
 	}
 	if payload.ProductKey != "esp32" {
 		t.Fatalf("ProductKey = %q", payload.ProductKey)
@@ -83,7 +83,7 @@ func TestDevicePropertySetReplyReturnsErrorForMissingSuccess(t *testing.T) {
 		Topic: "lf/v1/esp32/dev-001/property/up/set_reply",
 		Vars: map[string]string{
 			"product_key": "esp32",
-			"device_id":   "dev-001",
+			"device_slug": "dev-001",
 		},
 		Payload: []byte(`{"code":"ok"}`),
 	})

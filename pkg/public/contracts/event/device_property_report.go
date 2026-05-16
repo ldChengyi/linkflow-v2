@@ -7,7 +7,7 @@ const (
 )
 
 type PropertyReportedPayload struct {
-	DeviceID   string         `json:"device_id"`
+	DeviceSlug string         `json:"device_slug"`
 	ProductKey string         `json:"product_key"`
 	Protocol   string         `json:"protocol"`
 	Properties map[string]any `json:"properties"`

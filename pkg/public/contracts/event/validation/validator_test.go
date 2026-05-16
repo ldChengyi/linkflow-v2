@@ -116,7 +116,7 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		payload map[string]any
 	}{
 		{
-			name: "missing device_id",
+			name: "missing device_slug",
 			payload: map[string]any{
 				"product_key": "esp32",
 				"protocol":    "mqtt",
@@ -128,7 +128,7 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "missing properties",
 			payload: map[string]any{
-				"device_id":   "dev-001",
+				"device_slug": "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
 			},
@@ -136,7 +136,7 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "empty properties",
 			payload: map[string]any{
-				"device_id":   "dev-001",
+				"device_slug": "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
 				"properties":  map[string]any{},
@@ -145,7 +145,7 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "invalid property name",
 			payload: map[string]any{
-				"device_id":   "dev-001",
+				"device_slug": "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
 				"properties": map[string]any{
@@ -156,7 +156,7 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "unsupported property value type",
 			payload: map[string]any{
-				"device_id":   "dev-001",
+				"device_slug": "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
 				"properties": map[string]any{
@@ -198,7 +198,7 @@ func validPropertyEvent() map[string]any {
 		"producer":      "mqtt-gateway",
 		"tenant_id":     "default",
 		"payload": map[string]any{
-			"device_id":   "dev-001",
+			"device_slug": "dev-001",
 			"product_key": "esp32",
 			"protocol":    "mqtt",
 			"properties": map[string]any{
@@ -219,7 +219,7 @@ func validPropertySetAcknowledgedEvent() map[string]any {
 		"producer":      "mqtt-gateway",
 		"tenant_id":     "default",
 		"payload": map[string]any{
-			"device_id":   "dev-001",
+			"device_slug": "dev-001",
 			"product_key": "esp32",
 			"protocol":    "mqtt",
 			"success":     true,

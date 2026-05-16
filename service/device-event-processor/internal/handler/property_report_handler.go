@@ -57,7 +57,7 @@ func (h *PropertyReportHandler) Handle(ctx context.Context, env *event.Envelope)
 	}
 
 	result.ProductKey = payload.ProductKey
-	result.DeviceID = payload.DeviceID
+	result.DeviceSlug = payload.DeviceSlug
 	if err := h.writer.SavePropertyReport(ctx, env, payload); err != nil {
 		result.Decision = messaging.DecisionRetry
 		result.Err = fmt.Errorf("save property report: %w", err)

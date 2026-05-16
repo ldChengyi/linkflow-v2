@@ -29,6 +29,27 @@ export default defineConfig({
       wrappers: ['@/wrappers/AuthGuard'],
     },
     {
+      name: '产品管理',
+      path: '/admin/tenants/products',
+      component: './Admin',
+      layout: false,
+      wrappers: ['@/wrappers/AuthGuard'],
+    },
+    {
+      name: '物模型管理',
+      path: '/admin/tenants/thingsmodels',
+      component: './Admin',
+      layout: false,
+      wrappers: ['@/wrappers/AuthGuard'],
+    },
+    {
+      name: '设备管理',
+      path: '/admin/tenants/devices',
+      component: './Admin',
+      layout: false,
+      wrappers: ['@/wrappers/AuthGuard'],
+    },
+    {
       name: '审计日志',
       path: '/admin/audit-logs',
       component: './Admin',

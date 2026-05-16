@@ -5,18 +5,18 @@
     "description": "Emitted when a device reports property values through any ingestion protocol (MQTT, HTTP, CoAP). The event carries the reported property values and the protocol context. This schema validates only the payload; the full event must also satisfy envelope.schema.json.",
     "type": "object",
     "required": [
-        "device_id",
+        "device_slug",
         "product_key",
         "protocol",
         "properties"
     ],
     "additionalProperties": false,
     "properties": {
-        "device_id": {
+        "device_slug": {
             "type": "string",
             "minLength": 1,
             "maxLength": 128,
-            "description": "Stable device identifier within the tenant scope. Combined with tenant_id, uniquely identifies a device."
+            "description": "Platform-facing device slug within the tenant scope. Combined with tenant_id, uniquely identifies a device at protocol boundaries."
         },
         "product_key": {
             "type": "string",

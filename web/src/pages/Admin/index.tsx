@@ -5,6 +5,7 @@ import type { AppLocale } from '@/i18n/auth';
 import { type AdminSectionId, useAdminUiStore } from '@/stores/adminUiStore';
 import { useAuthStore } from '@/stores/authStore';
 import {
+  ApartmentOutlined,
   CloseOutlined,
   DashboardOutlined,
   DatabaseOutlined,
@@ -22,7 +23,10 @@ import { Link, history, useLocation } from '@umijs/max';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import AuditLogManagement from './AuditLogManagement';
+import DeviceManagement from './DeviceManagement';
+import ProductManagement from './ProductManagement';
 import TenantManagement from './TenantManagement';
+import ThingsModelManagement from './ThingsModelManagement';
 
 interface NavItem {
   icon: React.ReactNode;
@@ -58,16 +62,28 @@ const navItems: NavItem[] = [
     path: '/admin/tenants',
   },
   {
+    icon: <DatabaseOutlined aria-hidden="true" />,
+    id: 'products',
+    labelKey: 'adminProductsNav',
+    path: '/admin/tenants/products',
+  },
+  {
+    icon: <ApartmentOutlined aria-hidden="true" />,
+    id: 'thingsModels',
+    labelKey: 'adminThingsModelsNav',
+    path: '/admin/tenants/thingsmodels',
+  },
+  {
+    icon: <DeploymentUnitOutlined aria-hidden="true" />,
+    id: 'devices',
+    labelKey: 'adminDevicesNav',
+    path: '/admin/tenants/devices',
+  },
+  {
     icon: <FileSearchOutlined aria-hidden="true" />,
     id: 'auditLogs',
     labelKey: 'adminAuditLogsNav',
     path: '/admin/audit-logs',
-  },
-  {
-    icon: <DatabaseOutlined aria-hidden="true" />,
-    id: 'deviceManagement',
-    labelKey: 'adminDeviceManagementNav',
-    path: '/admin/device-management',
   },
   {
     icon: <SettingOutlined aria-hidden="true" />,
@@ -108,17 +124,29 @@ const sectionContent: Record<AdminSectionId, SectionContent> = {
     summaryKey: 'adminTenantsSummary',
     contentKey: 'adminTenantsContent',
   },
+  products: {
+    id: 'products',
+    titleKey: 'adminProductsTitle',
+    summaryKey: 'adminProductsSummary',
+    contentKey: 'adminProductsContent',
+  },
+  thingsModels: {
+    id: 'thingsModels',
+    titleKey: 'adminThingsModelsTitle',
+    summaryKey: 'adminThingsModelsSummary',
+    contentKey: 'adminThingsModelsContent',
+  },
+  devices: {
+    id: 'devices',
+    titleKey: 'adminDevicesTitle',
+    summaryKey: 'adminDevicesSummary',
+    contentKey: 'adminDevicesContent',
+  },
   auditLogs: {
     id: 'auditLogs',
     titleKey: 'adminAuditLogsTitle',
     summaryKey: 'adminAuditLogsSummary',
     contentKey: 'adminAuditLogsContent',
-  },
-  deviceManagement: {
-    id: 'deviceManagement',
-    titleKey: 'adminDeviceManagementTitle',
-    summaryKey: 'adminDeviceManagementSummary',
-    contentKey: 'adminDeviceManagementContent',
   },
   settings: {
     id: 'settings',
@@ -130,6 +158,18 @@ const sectionContent: Record<AdminSectionId, SectionContent> = {
 
 const getActiveSectionId = (pathname: string): AdminSectionId => {
   if (pathname.startsWith('/admin/tenants')) {
+    if (pathname.startsWith('/admin/tenants/products')) {
+      return 'products';
+    }
+
+    if (pathname.startsWith('/admin/tenants/thingsmodels')) {
+      return 'thingsModels';
+    }
+
+    if (pathname.startsWith('/admin/tenants/devices')) {
+      return 'devices';
+    }
+
     return 'tenants';
   }
 
@@ -138,7 +178,7 @@ const getActiveSectionId = (pathname: string): AdminSectionId => {
   }
 
   if (pathname.startsWith('/admin/device-management')) {
-    return 'deviceManagement';
+    return 'devices';
   }
 
   if (pathname.startsWith('/admin/settings')) {
@@ -440,6 +480,9 @@ const AdminPage = () => {
                 transition={{ duration: 0.18, ease: 'easeOut' }}
               >
                 {activeContent.id === 'tenants' ||
+                activeContent.id === 'products' ||
+                activeContent.id === 'thingsModels' ||
+                activeContent.id === 'devices' ||
                 activeContent.id === 'auditLogs' ? null : (
                   <section className="mb-6">
                     <p className="m-0 text-sm font-bold uppercase text-linkflow-primary">
@@ -458,6 +501,12 @@ const AdminPage = () => {
 
                 {activeContent.id === 'tenants' ? (
                   <TenantManagement />
+                ) : activeContent.id === 'products' ? (
+                  <ProductManagement />
+                ) : activeContent.id === 'thingsModels' ? (
+                  <ThingsModelManagement />
+                ) : activeContent.id === 'devices' ? (
+                  <DeviceManagement />
                 ) : activeContent.id === 'auditLogs' ? (
                   <AuditLogManagement />
                 ) : (
@@ -512,9 +561,15 @@ const AdminPage = () => {
                               <p className="m-0 mt-3 leading-7 text-linkflow-subtle dark:text-linkflow-dark-subtle">
                                 {item.id === 'tenants'
                                   ? t('adminEntryTenantsDescription')
+                                  : item.id === 'products'
+                                  ? t('adminEntryProductsDescription')
+                                  : item.id === 'thingsModels'
+                                  ? t('adminEntryThingsModelsDescription')
+                                  : item.id === 'devices'
+                                  ? t('adminEntryDevicesDescription')
                                   : item.id === 'auditLogs'
                                   ? t('adminEntryAuditLogsDescription')
-                                  : t('adminEntryDeviceManagementDescription')}
+                                  : t('adminEntrySettingsDescription')}
                               </p>
                             )}
                           </Link>

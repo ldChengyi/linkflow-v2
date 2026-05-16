@@ -5,18 +5,18 @@
     "description": "Emitted when a device acknowledges a cloud-to-device property set command. The event records whether the command succeeded and can include the affected properties and the original protocol payload.",
     "type": "object",
     "required": [
-        "device_id",
+        "device_slug",
         "product_key",
         "protocol",
         "success"
     ],
     "additionalProperties": false,
     "properties": {
-        "device_id": {
+        "device_slug": {
             "type": "string",
             "minLength": 1,
             "maxLength": 128,
-            "description": "Stable device identifier within the tenant scope. Combined with tenant_id, uniquely identifies a device."
+            "description": "Platform-facing device slug within the tenant scope. Combined with tenant_id, uniquely identifies a device at protocol boundaries."
         },
         "product_key": {
             "type": "string",

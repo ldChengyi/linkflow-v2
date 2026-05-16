@@ -5,15 +5,19 @@ import { persist } from 'zustand/middleware';
 export type AdminSectionId =
   | 'overview'
   | 'tenants'
+  | 'products'
+  | 'thingsModels'
+  | 'devices'
   | 'auditLogs'
-  | 'deviceManagement'
   | 'settings';
 
 const validSectionIds: AdminSectionId[] = [
   'overview',
   'tenants',
+  'products',
+  'thingsModels',
+  'devices',
   'auditLogs',
-  'deviceManagement',
   'settings',
 ];
 

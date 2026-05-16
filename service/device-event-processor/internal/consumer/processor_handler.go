@@ -56,8 +56,8 @@ func resultFields(result processor.Result) map[string]string {
 	if result.ProductKey != "" {
 		fields["product_key"] = result.ProductKey
 	}
-	if result.DeviceID != "" {
-		fields["device_id"] = result.DeviceID
+	if result.DeviceSlug != "" {
+		fields["device_slug"] = result.DeviceSlug
 	}
 	if len(fields) == 0 {
 		return nil

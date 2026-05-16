@@ -6,7 +6,7 @@ const (
 )
 
 type PropertySetAcknowledgedPayload struct {
-	DeviceID   string         `json:"device_id"`
+	DeviceSlug string         `json:"device_slug"`
 	ProductKey string         `json:"product_key"`
 	Protocol   string         `json:"protocol"`
 	Success    bool           `json:"success"`

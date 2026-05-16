@@ -23,7 +23,7 @@ type Result struct {
 	EventVersion int
 	TenantID     string
 	ProductKey   string
-	DeviceID     string
+	DeviceSlug   string
 	Err          error
 }
 

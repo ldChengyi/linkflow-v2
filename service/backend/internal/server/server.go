@@ -15,6 +15,9 @@ import (
 type Options struct {
 	Auth         *handler.AuthHandler
 	Tenant       *handler.TenantHandler
+	Product      *handler.ProductHandler
+	ThingsModel  *handler.ThingsModelHandler
+	Device       *handler.DeviceHandler
 	AuditLog     *handler.AuditHandler
 	Authenticate middleware.Middleware
 	Audit        middleware.Middleware
@@ -38,6 +41,15 @@ func New(cfg config.Config, log *slog.Logger, opt Options) (*http.Server, error)
 	}
 	if opt.Tenant != nil {
 		opt.Tenant.RegisterRoutes(routes, opt.Authenticate, opt.Audit)
+	}
+	if opt.Product != nil {
+		opt.Product.RegisterRoutes(routes, opt.Authenticate, opt.Audit)
+	}
+	if opt.ThingsModel != nil {
+		opt.ThingsModel.RegisterRoutes(routes, opt.Authenticate, opt.Audit)
+	}
+	if opt.Device != nil {
+		opt.Device.RegisterRoutes(routes, opt.Authenticate, opt.Audit)
 	}
 	if opt.AuditLog != nil {
 		opt.AuditLog.RegisterRoutes(routes, opt.Authenticate)

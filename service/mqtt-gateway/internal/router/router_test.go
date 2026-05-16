@@ -13,7 +13,7 @@ func TestRouterDispatchMatchesRouteAndExtractsVars(t *testing.T) {
 
 	err := r.Handle(
 		"device.property.post",
-		`^lf/v1/(?P<product_key>[^/]+)/(?P<device_id>[^/]+)/property/up/post$`,
+		`^lf/v1/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
 		HandlerFunc(func(ctx context.Context, msg ParsedMessage) error {
 			called = true
 
@@ -26,8 +26,8 @@ func TestRouterDispatchMatchesRouteAndExtractsVars(t *testing.T) {
 			if msg.Vars["product_key"] != "esp32" {
 				t.Fatalf("product_key = %q", msg.Vars["product_key"])
 			}
-			if msg.Vars["device_id"] != "dev-001" {
-				t.Fatalf("device_id = %q", msg.Vars["device_id"])
+			if msg.Vars["device_slug"] != "dev-001" {
+				t.Fatalf("device_slug = %q", msg.Vars["device_slug"])
 			}
 
 			return nil
@@ -55,7 +55,7 @@ func TestRouterDispatchDoesNotCallHandlerWhenNoRouteMatches(t *testing.T) {
 
 	err := r.Handle(
 		"device.property.post",
-		`^lf/v1/(?P<product_key>[^/]+)/(?P<device_id>[^/]+)/property/up/post$`,
+		`^lf/v1/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
 		HandlerFunc(func(ctx context.Context, msg ParsedMessage) error {
 			t.Fatal("handler should not be called")
 			return nil
@@ -76,7 +76,7 @@ func TestRouterDispatchDoesNotPanicWhenHandlerReturnsError(t *testing.T) {
 
 	err := r.Handle(
 		"device.property.post",
-		`^lf/v1/(?P<product_key>[^/]+)/(?P<device_id>[^/]+)/property/up/post$`,
+		`^lf/v1/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
 		HandlerFunc(func(ctx context.Context, msg ParsedMessage) error {
 			return errors.New("handler failed")
 		}),

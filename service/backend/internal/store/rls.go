@@ -8,23 +8,37 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func withRLSUser(ctx context.Context, pool *pgxpool.Pool, userID string, scope string, fn func(pgx.Tx) error) error {
-	tx, err := pool.Begin(ctx)
+const rlsActorUserSetting = "app.current_user_id"
+
+type actorRLSStore struct {
+	pool  *pgxpool.Pool
+	scope string
+}
+
+func newActorRLSStore(pool *pgxpool.Pool, scope string) actorRLSStore {
+	return actorRLSStore{
+		pool:  pool,
+		scope: scope,
+	}
+}
+
+func (s actorRLSStore) withActor(ctx context.Context, actorUserID string, fn func(pgx.Tx) error) error {
+	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin %s transaction: %w", scope, err)
+		return fmt.Errorf("begin %s transaction: %w", s.scope, err)
 	}
 	defer func() {
 		_ = tx.Rollback(ctx)
 	}()
 
-	if _, err := tx.Exec(ctx, `SELECT set_config('app.current_user_id', $1, true)`, userID); err != nil {
-		return fmt.Errorf("set %s rls user: %w", scope, err)
+	if _, err := tx.Exec(ctx, `SELECT set_config($1, $2, true)`, rlsActorUserSetting, actorUserID); err != nil {
+		return fmt.Errorf("set %s rls actor: %w", s.scope, err)
 	}
 	if err := fn(tx); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit %s transaction: %w", scope, err)
+		return fmt.Errorf("commit %s transaction: %w", s.scope, err)
 	}
 	return nil
 }

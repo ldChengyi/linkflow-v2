@@ -1,16 +1,13 @@
 # LinkFlow Admin UI Style
 
-This document records the current admin UI direction so future frontend work can
-continue in the same style.
+This document records the current admin UI direction so future frontend work can continue in the same style.
 
 ## Stack
 
 - Framework: Umi Max with React and TypeScript.
-- Styling: Tailwind CSS utilities. Prefer Tailwind classes in components for the
-  admin UI instead of adding page-specific Less modules.
+- Styling: Tailwind CSS utilities. Prefer Tailwind classes in components for the admin UI instead of adding page-specific Less modules.
 - Icons: `@ant-design/icons`, imported by icon name.
-- Animation: `motion/react` for small route/tab transitions. Keep animations
-  light and respect `useReducedMotion`.
+- Animation: `motion/react` for small route/tab transitions. Keep animations light and respect `useReducedMotion`.
 - UI state: Zustand persist store in `src/stores/adminUiStore.ts`.
 
 ## Layout
@@ -27,8 +24,7 @@ continue in the same style.
 ## Sidebar
 
 - Default sidebar is narrow and icon-only.
-- The expand/collapse button lives at the far left of the top navbar, not inside
-  the sidebar.
+- The expand/collapse button lives at the far left of the top navbar, not inside the sidebar.
 - Desktop behavior:
   - collapsed: icon-only sidebar,
   - expanded: wider sidebar with menu names.
@@ -45,8 +41,7 @@ continue in the same style.
   - i18n language dropdown,
   - logout.
 - Navbar controls should use 44px touch targets.
-- Keep navbar visual style quiet: white/panel background, thin border, muted
-  icons, primary hover color.
+- Keep navbar visual style quiet: white/panel background, thin border, muted icons, primary hover color.
 
 ## Tabs
 
@@ -55,8 +50,7 @@ continue in the same style.
 - Tabs are persisted through Zustand.
 - Tabs display the route icon, route label, and a close `x` button.
 - Closing a tab should not trigger tab navigation.
-- If the active tab is closed, navigate to the last remaining tab. If no useful
-  tab remains, fall back to overview.
+- If the active tab is closed, navigate to the last remaining tab. If no useful tab remains, fall back to overview.
 - Tabs should support horizontal scrolling instead of wrapping or compressing.
 
 ## Routes
@@ -65,8 +59,10 @@ Current admin route model:
 
 - `/admin`: overview
 - `/admin/tenants`: tenant management parent route
+- `/admin/tenants/products`: product management route
+- `/admin/tenants/thingsmodels`: thing model management route
+- `/admin/tenants/devices`: device management route
 - `/admin/audit-logs`: audit log list route
-- `/admin/device-management`: device management parent route
 - `/admin/settings`: settings route
 
 Do not restore the old standalone event route unless product scope changes.
@@ -99,11 +95,9 @@ Do not restore the old standalone event route unless product scope changes.
   - locale,
   - sidebar expanded state,
   - visited tabs.
-- Keep temporary mobile drawer open/close state local to `AdminPage`; it should
-  not persist across refreshes.
+- Keep temporary mobile drawer open/close state local to `AdminPage`; it should not persist across refreshes.
 - Do not use server-state patterns until real API data is introduced.
 
 ## Current Build Note
 
-`npm run build` requires Node 20+ because Umi utoopack enforces that. The project
-`.nvmrc` is `22`.
+`npm run build` requires Node 20+ because Umi utoopack enforces that. The project `.nvmrc` is `22`.

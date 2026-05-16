@@ -16,6 +16,7 @@ import (
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/auth/password"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/auth/token"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/config"
+	"github.com/ldchengyi/linkflow-v2/service/backend/internal/credential"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/handler"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/middleware"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/server"
@@ -93,6 +94,10 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create password hasher: %w", err)
 	}
+	deviceSecretManager, err := credential.NewSecretManager(cfg.AuthBCryptCost)
+	if err != nil {
+		return fmt.Errorf("create device secret manager: %w", err)
+	}
 	authService, err := service.NewAuthService(userStore, sessionStore, passwordHasher, tokenManager)
 	if err != nil {
 		return fmt.Errorf("create auth service: %w", err)
@@ -113,6 +118,42 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create tenant handler: %w", err)
 	}
+	productStore, err := store.NewPostgresProductStore(postgresPool)
+	if err != nil {
+		return fmt.Errorf("create product store: %w", err)
+	}
+	productService, err := service.NewProductService(productStore)
+	if err != nil {
+		return fmt.Errorf("create product service: %w", err)
+	}
+	productHandler, err := handler.NewProductHandler(productService, log)
+	if err != nil {
+		return fmt.Errorf("create product handler: %w", err)
+	}
+	thingsModelStore, err := store.NewPostgresThingsModelStore(postgresPool)
+	if err != nil {
+		return fmt.Errorf("create thingsmodel store: %w", err)
+	}
+	thingsModelService, err := service.NewThingsModelService(thingsModelStore)
+	if err != nil {
+		return fmt.Errorf("create thingsmodel service: %w", err)
+	}
+	thingsModelHandler, err := handler.NewThingsModelHandler(thingsModelService, log)
+	if err != nil {
+		return fmt.Errorf("create thingsmodel handler: %w", err)
+	}
+	deviceStore, err := store.NewPostgresDeviceStore(postgresPool)
+	if err != nil {
+		return fmt.Errorf("create device store: %w", err)
+	}
+	deviceService, err := service.NewDeviceService(deviceStore, deviceSecretManager)
+	if err != nil {
+		return fmt.Errorf("create device service: %w", err)
+	}
+	deviceHandler, err := handler.NewDeviceHandler(deviceService, log)
+	if err != nil {
+		return fmt.Errorf("create device handler: %w", err)
+	}
 	auditStore, err := store.NewPostgresAuditStore(postgresPool)
 	if err != nil {
 		return fmt.Errorf("create audit store: %w", err)
@@ -129,6 +170,9 @@ func run(ctx context.Context, log *slog.Logger) error {
 	httpServer, err := server.New(cfg, log, server.Options{
 		Auth:         authHandler,
 		Tenant:       tenantHandler,
+		Product:      productHandler,
+		ThingsModel:  thingsModelHandler,
+		Device:       deviceHandler,
 		AuditLog:     auditHandler,
 		Authenticate: middleware.Authenticate(tokenManager, sessionStore),
 		Audit:        middleware.Audit(auditService, log),

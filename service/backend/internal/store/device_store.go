@@ -1,0 +1,428 @@
+package store
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/ldchengyi/linkflow-v2/service/backend/internal/service"
+)
+
+type PostgresDeviceStore struct {
+	actor actorRLSStore
+}
+
+func NewPostgresDeviceStore(pool *pgxpool.Pool) (*PostgresDeviceStore, error) {
+	if pool == nil {
+		return nil, fmt.Errorf("postgres pool is nil")
+	}
+	return &PostgresDeviceStore{actor: newActorRLSStore(pool, "device")}, nil
+}
+
+func (s *PostgresDeviceStore) FindDeviceProductAuthType(ctx context.Context, in service.DeviceProductAuthInput) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
+	const query = `SELECT auth_type FROM products WHERE id = $1 AND tenant_id = $2`
+
+	var authType string
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, in.ProductID, in.TenantID).Scan(&authType)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", service.ErrInvalidDeviceInput
+		}
+		return "", fmt.Errorf("find device product auth type: %w", err)
+	}
+	return authType, nil
+}
+
+func (s *PostgresDeviceStore) CreateDevice(ctx context.Context, in service.DeviceCreateInput) (service.Device, error) {
+	if err := ctx.Err(); err != nil {
+		return service.Device{}, err
+	}
+
+	const query = `
+INSERT INTO devices (
+    tenant_id,
+    product_id,
+    device_slug,
+    device_name,
+    description,
+    gateway_device_id
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+)
+	RETURNING id::text, tenant_id::text, product_id::text, device_slug, device_name, description, status, connection_status, COALESCE(gateway_device_id::text, ''), COALESCE(firmware_version, ''), COALESCE(ip_address, ''), last_seen_at, created_at, updated_at`
+
+	var device service.Device
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		ok, err := productBelongsToTenant(ctx, tx, in.ProductID, in.TenantID)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return service.ErrInvalidDeviceInput
+		}
+		if in.GatewayDeviceID != "" {
+			ok, err := deviceBelongsToTenant(ctx, tx, in.GatewayDeviceID, in.TenantID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return service.ErrInvalidDeviceInput
+			}
+		}
+
+		if err := scanDevice(tx.QueryRow(
+			ctx,
+			query,
+			in.TenantID,
+			in.ProductID,
+			in.DeviceSlug,
+			in.DeviceName,
+			in.Description,
+			nullIfEmpty(in.GatewayDeviceID),
+		), &device); err != nil {
+			return err
+		}
+
+		if in.DeviceSecretHash != "" {
+			if err := insertActiveDeviceCredential(ctx, tx, device.TenantID, device.ID, in.DeviceSecretHash); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		if isUniqueViolation(err) {
+			return service.Device{}, service.ErrDeviceAlreadyExists
+		}
+		return service.Device{}, fmt.Errorf("insert device: %w", err)
+	}
+	return device, nil
+}
+
+func (s *PostgresDeviceStore) ListDevices(ctx context.Context, in service.DeviceListInput) (service.PageResult[service.Device], error) {
+	if err := ctx.Err(); err != nil {
+		return service.PageResult[service.Device]{}, err
+	}
+
+	const query = `
+SELECT id::text, tenant_id::text, product_id::text, device_slug, device_name, description, status, connection_status, COALESCE(gateway_device_id::text, ''), COALESCE(firmware_version, ''), COALESCE(ip_address, ''), last_seen_at, created_at, updated_at
+FROM devices
+WHERE tenant_id = $1
+  AND ($2 = '' OR product_id::text = $2)
+ORDER BY created_at DESC, id DESC
+LIMIT $3 OFFSET $4`
+
+	const countQuery = `
+SELECT count(*)
+FROM devices
+WHERE tenant_id = $1
+  AND ($2 = '' OR product_id::text = $2)`
+
+	var devices []service.Device
+	var total int
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, countQuery, in.TenantID, in.ProductID).Scan(&total); err != nil {
+			return err
+		}
+
+		rows, err := tx.Query(ctx, query, in.TenantID, in.ProductID, in.PageInput.Limit(), in.PageInput.Offset())
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var device service.Device
+			if err := scanDevice(rows, &device); err != nil {
+				return err
+			}
+			devices = append(devices, device)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return service.PageResult[service.Device]{}, fmt.Errorf("list devices: %w", err)
+	}
+	return service.NewPageResult(devices, total, in.PageInput), nil
+}
+
+func (s *PostgresDeviceStore) FindDeviceByID(ctx context.Context, in service.DeviceGetInput) (service.Device, error) {
+	if err := ctx.Err(); err != nil {
+		return service.Device{}, err
+	}
+
+	const query = `
+SELECT id::text, tenant_id::text, product_id::text, device_slug, device_name, description, status, connection_status, COALESCE(gateway_device_id::text, ''), COALESCE(firmware_version, ''), COALESCE(ip_address, ''), last_seen_at, created_at, updated_at
+FROM devices
+WHERE id = $1`
+
+	var device service.Device
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		return scanDevice(tx.QueryRow(ctx, query, in.DeviceID), &device)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.Device{}, service.ErrDeviceNotFound
+		}
+		return service.Device{}, fmt.Errorf("find device by id: %w", err)
+	}
+	return device, nil
+}
+
+func (s *PostgresDeviceStore) FindDeviceLatestProperties(ctx context.Context, in service.DeviceLatestPropertiesInput) (service.DeviceLatestProperties, error) {
+	if err := ctx.Err(); err != nil {
+		return service.DeviceLatestProperties{}, err
+	}
+
+	const query = `
+SELECT
+    d.id::text,
+    d.tenant_id::text,
+    d.product_id::text,
+    p.product_key,
+    d.device_slug,
+    latest.properties,
+    latest.occurred_at,
+    latest.received_at
+FROM devices d
+JOIN products p ON p.id = d.product_id AND p.tenant_id = d.tenant_id
+LEFT JOIN LATERAL (
+    SELECT properties, occurred_at, received_at
+    FROM device_property_report_events
+    WHERE tenant_id = d.tenant_id::text
+      AND product_key = p.product_key
+      AND device_slug = d.device_slug
+    ORDER BY occurred_at DESC
+    LIMIT 1
+) latest ON true
+WHERE d.id = $1`
+
+	var latest service.DeviceLatestProperties
+	var properties []byte
+	var occurredAt sql.NullTime
+	var receivedAt sql.NullTime
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, in.DeviceID).Scan(
+			&latest.ID,
+			&latest.TenantID,
+			&latest.ProductID,
+			&latest.ProductKey,
+			&latest.DeviceSlug,
+			&properties,
+			&occurredAt,
+			&receivedAt,
+		)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.DeviceLatestProperties{}, service.ErrDeviceNotFound
+		}
+		return service.DeviceLatestProperties{}, fmt.Errorf("find device latest properties: %w", err)
+	}
+
+	latest.Properties = map[string]any{}
+	if len(properties) > 0 {
+		if err := json.Unmarshal(properties, &latest.Properties); err != nil {
+			return service.DeviceLatestProperties{}, fmt.Errorf("unmarshal device latest properties: %w", err)
+		}
+		latest.Reported = true
+	}
+	if occurredAt.Valid {
+		t := occurredAt.Time
+		latest.OccurredAt = &t
+	}
+	if receivedAt.Valid {
+		t := receivedAt.Time
+		latest.ReceivedAt = &t
+	}
+	return latest, nil
+}
+
+func (s *PostgresDeviceStore) UpdateDevice(ctx context.Context, in service.DeviceUpdateInput) (service.Device, error) {
+	if err := ctx.Err(); err != nil {
+		return service.Device{}, err
+	}
+
+	const query = `
+UPDATE devices
+SET device_name = $2,
+    description = $3,
+    status = $4,
+    gateway_device_id = $5,
+    updated_at = now()
+WHERE id = $1
+	RETURNING id::text, tenant_id::text, product_id::text, device_slug, device_name, description, status, connection_status, COALESCE(gateway_device_id::text, ''), COALESCE(firmware_version, ''), COALESCE(ip_address, ''), last_seen_at, created_at, updated_at`
+
+	var device service.Device
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		if in.GatewayDeviceID != "" {
+			ok, err := gatewayBelongsToDeviceTenant(ctx, tx, in.GatewayDeviceID, in.DeviceID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return service.ErrInvalidDeviceInput
+			}
+		}
+
+		return scanDevice(tx.QueryRow(
+			ctx,
+			query,
+			in.DeviceID,
+			in.DeviceName,
+			in.Description,
+			in.Status,
+			nullIfEmpty(in.GatewayDeviceID),
+		), &device)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.Device{}, service.ErrDeviceNotFound
+		}
+		return service.Device{}, fmt.Errorf("update device: %w", err)
+	}
+	return device, nil
+}
+
+func (s *PostgresDeviceStore) DeleteDevice(ctx context.Context, in service.DeviceDeleteInput) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	const query = `DELETE FROM devices WHERE id = $1`
+
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		inUse, err := deviceHasSubDevices(ctx, tx, in.DeviceID)
+		if err != nil {
+			return err
+		}
+		if inUse {
+			return service.ErrInvalidDeviceInput
+		}
+
+		tag, err := tx.Exec(ctx, query, in.DeviceID)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return service.ErrDeviceNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, service.ErrDeviceNotFound) {
+			return service.ErrDeviceNotFound
+		}
+		return fmt.Errorf("delete device: %w", err)
+	}
+	return nil
+}
+
+func (s *PostgresDeviceStore) withDeviceUser(ctx context.Context, userID string, fn func(pgx.Tx) error) error {
+	return s.actor.withActor(ctx, userID, fn)
+}
+
+type deviceScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanDevice(row deviceScanner, device *service.Device) error {
+	var lastSeenAt sql.NullTime
+	if err := row.Scan(
+		&device.ID,
+		&device.TenantID,
+		&device.ProductID,
+		&device.DeviceSlug,
+		&device.DeviceName,
+		&device.Description,
+		&device.Status,
+		&device.ConnectionStatus,
+		&device.GatewayDeviceID,
+		&device.FirmwareVersion,
+		&device.IPAddress,
+		&lastSeenAt,
+		&device.CreatedAt,
+		&device.UpdatedAt,
+	); err != nil {
+		return err
+	}
+	if lastSeenAt.Valid {
+		t := lastSeenAt.Time
+		device.LastSeenAt = &t
+	}
+	return nil
+}
+
+func productBelongsToTenant(ctx context.Context, tx pgx.Tx, productID string, tenantID string) (bool, error) {
+	const query = `SELECT EXISTS (SELECT 1 FROM products WHERE id = $1 AND tenant_id = $2)`
+
+	var ok bool
+	if err := tx.QueryRow(ctx, query, productID, tenantID).Scan(&ok); err != nil {
+		return false, fmt.Errorf("check device product: %w", err)
+	}
+	return ok, nil
+}
+
+func deviceBelongsToTenant(ctx context.Context, tx pgx.Tx, deviceID string, tenantID string) (bool, error) {
+	const query = `SELECT EXISTS (SELECT 1 FROM devices WHERE id = $1 AND tenant_id = $2)`
+
+	var ok bool
+	if err := tx.QueryRow(ctx, query, deviceID, tenantID).Scan(&ok); err != nil {
+		return false, fmt.Errorf("check tenant device: %w", err)
+	}
+	return ok, nil
+}
+
+func gatewayBelongsToDeviceTenant(ctx context.Context, tx pgx.Tx, gatewayDeviceID string, deviceID string) (bool, error) {
+	const query = `
+SELECT EXISTS (
+    SELECT 1
+    FROM devices device
+    JOIN devices gateway ON gateway.tenant_id = device.tenant_id
+    WHERE device.id = $1
+      AND gateway.id = $2
+)`
+
+	var ok bool
+	if err := tx.QueryRow(ctx, query, deviceID, gatewayDeviceID).Scan(&ok); err != nil {
+		return false, fmt.Errorf("check device gateway: %w", err)
+	}
+	return ok, nil
+}
+
+func deviceHasSubDevices(ctx context.Context, tx pgx.Tx, deviceID string) (bool, error) {
+	const query = `SELECT EXISTS (SELECT 1 FROM devices WHERE gateway_device_id = $1)`
+
+	var ok bool
+	if err := tx.QueryRow(ctx, query, deviceID).Scan(&ok); err != nil {
+		return false, fmt.Errorf("check sub devices: %w", err)
+	}
+	return ok, nil
+}
+
+func insertActiveDeviceCredential(ctx context.Context, tx pgx.Tx, tenantID string, deviceID string, secretHash string) error {
+	const query = `
+INSERT INTO device_credentials (
+    tenant_id,
+    device_id,
+    secret_hash,
+    status
+) VALUES (
+    $1, $2, $3, 'active'
+)`
+
+	if _, err := tx.Exec(ctx, query, tenantID, deviceID, secretHash); err != nil {
+		return fmt.Errorf("insert device credential: %w", err)
+	}
+	return nil
+}

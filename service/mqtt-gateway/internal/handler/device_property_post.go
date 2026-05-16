@@ -15,7 +15,7 @@ import (
 //
 // MQTT topic shape:
 //
-//	lf/v1/{product_key}/{device_id}/property/up/post
+//	lf/v1/{product_key}/{device_slug}/property/up/post
 func DevicePropertyPost(spec event.Spec, ef event.EnvelopeFactory, pub publisher.Publisher) router.Handler {
 	return router.HandlerFunc(func(ctx context.Context, msg router.ParsedMessage) error {
 		var properties map[string]any
@@ -23,7 +23,7 @@ func DevicePropertyPost(spec event.Spec, ef event.EnvelopeFactory, pub publisher
 			return fmt.Errorf("decode properties: %w", err)
 		}
 		p := event.PropertyReportedPayload{
-			DeviceID:   msg.Vars["device_id"],
+			DeviceSlug: msg.Vars["device_slug"],
 			ProductKey: msg.Vars["product_key"],
 			Protocol:   "mqtt",
 			Properties: properties,

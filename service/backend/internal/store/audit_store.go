@@ -11,14 +11,14 @@ import (
 )
 
 type PostgresAuditStore struct {
-	pool *pgxpool.Pool
+	actor actorRLSStore
 }
 
 func NewPostgresAuditStore(pool *pgxpool.Pool) (*PostgresAuditStore, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("postgres pool is nil")
 	}
-	return &PostgresAuditStore{pool: pool}, nil
+	return &PostgresAuditStore{actor: newActorRLSStore(pool, "audit")}, nil
 }
 
 func (s *PostgresAuditStore) WriteAuditLog(ctx context.Context, entry service.AuditEntry) error {
@@ -176,5 +176,5 @@ LIMIT $1 OFFSET $2`
 }
 
 func (s *PostgresAuditStore) withAuditUser(ctx context.Context, userID string, fn func(pgx.Tx) error) error {
-	return withRLSUser(ctx, s.pool, userID, "audit", fn)
+	return s.actor.withActor(ctx, userID, fn)
 }
