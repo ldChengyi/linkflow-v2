@@ -12,6 +12,7 @@ import {
   DeploymentUnitOutlined,
   FileSearchOutlined,
   GlobalOutlined,
+  LineChartOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
@@ -24,6 +25,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import AuditLogManagement from './AuditLogManagement';
 import DeviceManagement from './DeviceManagement';
+import DevicePropertyManagement from './DevicePropertyManagement';
 import ProductManagement from './ProductManagement';
 import TenantManagement from './TenantManagement';
 import ThingsModelManagement from './ThingsModelManagement';
@@ -78,6 +80,12 @@ const navItems: NavItem[] = [
     id: 'devices',
     labelKey: 'adminDevicesNav',
     path: '/admin/tenants/devices',
+  },
+  {
+    icon: <LineChartOutlined aria-hidden="true" />,
+    id: 'deviceProperties',
+    labelKey: 'adminDevicePropertiesNav',
+    path: '/admin/tenants/device-properties',
   },
   {
     icon: <FileSearchOutlined aria-hidden="true" />,
@@ -142,6 +150,12 @@ const sectionContent: Record<AdminSectionId, SectionContent> = {
     summaryKey: 'adminDevicesSummary',
     contentKey: 'adminDevicesContent',
   },
+  deviceProperties: {
+    id: 'deviceProperties',
+    titleKey: 'adminDevicePropertiesTitle',
+    summaryKey: 'adminDevicePropertiesSummary',
+    contentKey: 'adminDevicePropertiesContent',
+  },
   auditLogs: {
     id: 'auditLogs',
     titleKey: 'adminAuditLogsTitle',
@@ -168,6 +182,10 @@ const getActiveSectionId = (pathname: string): AdminSectionId => {
 
     if (pathname.startsWith('/admin/tenants/devices')) {
       return 'devices';
+    }
+
+    if (pathname.startsWith('/admin/tenants/device-properties')) {
+      return 'deviceProperties';
     }
 
     return 'tenants';
@@ -483,6 +501,7 @@ const AdminPage = () => {
                 activeContent.id === 'products' ||
                 activeContent.id === 'thingsModels' ||
                 activeContent.id === 'devices' ||
+                activeContent.id === 'deviceProperties' ||
                 activeContent.id === 'auditLogs' ? null : (
                   <section className="mb-6">
                     <p className="m-0 text-sm font-bold uppercase text-linkflow-primary">
@@ -507,6 +526,8 @@ const AdminPage = () => {
                   <ThingsModelManagement />
                 ) : activeContent.id === 'devices' ? (
                   <DeviceManagement />
+                ) : activeContent.id === 'deviceProperties' ? (
+                  <DevicePropertyManagement />
                 ) : activeContent.id === 'auditLogs' ? (
                   <AuditLogManagement />
                 ) : (
@@ -567,6 +588,8 @@ const AdminPage = () => {
                                   ? t('adminEntryThingsModelsDescription')
                                   : item.id === 'devices'
                                   ? t('adminEntryDevicesDescription')
+                                  : item.id === 'deviceProperties'
+                                  ? t('adminEntryDevicePropertiesDescription')
                                   : item.id === 'auditLogs'
                                   ? t('adminEntryAuditLogsDescription')
                                   : t('adminEntrySettingsDescription')}

@@ -1,3 +1,4 @@
+import { history } from '@umijs/max';
 import { notification } from 'antd';
 import { I18nProvider } from './contexts/I18nContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -11,6 +12,7 @@ interface ApiErrorBody {
 interface RequestErrorLike {
   message?: string;
   response?: {
+    status?: number;
     data?: unknown;
   };
 }
@@ -52,6 +54,33 @@ const getRequestErrorMessage = (error: unknown) => {
   return 'Request failed';
 };
 
+const getRequestErrorStatus = (error: unknown) => {
+  const requestError = error as RequestErrorLike;
+  const body = requestError.response?.data;
+
+  if (typeof requestError.response?.status === 'number') {
+    return requestError.response.status;
+  }
+
+  if (isApiErrorBody(body) && typeof body.code === 'number') {
+    return body.code;
+  }
+
+  return undefined;
+};
+
+const redirectToLogin = () => {
+  const pathname = history.location.pathname;
+
+  if (pathname === '/login' || pathname === '/register') {
+    return;
+  }
+
+  const redirect = `${pathname}${history.location.search}${history.location.hash}`;
+  useAuthStore.getState().clearSession();
+  history.push(`/login?redirect=${encodeURIComponent(redirect)}`);
+};
+
 export function rootContainer(container: React.ReactNode) {
   return (
     <I18nProvider>
@@ -78,6 +107,11 @@ export const layout = () => {
 export const request: RequestRuntimeConfig = {
   errorConfig: {
     errorHandler: (error) => {
+      if (getRequestErrorStatus(error) === 401) {
+        redirectToLogin();
+        return;
+      }
+
       notification.error({
         message: 'Request failed',
         description: getRequestErrorMessage(error),

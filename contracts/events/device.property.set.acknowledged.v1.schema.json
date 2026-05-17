@@ -5,6 +5,7 @@
     "description": "Emitted when a device acknowledges a cloud-to-device property set command. The event records whether the command succeeded and can include the affected properties and the original protocol payload.",
     "type": "object",
     "required": [
+        "tenant_slug",
         "device_slug",
         "product_key",
         "protocol",
@@ -12,6 +13,13 @@
     ],
     "additionalProperties": false,
     "properties": {
+        "tenant_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Platform-facing tenant slug used at protocol boundaries. Producers should set this from the MQTT topic segment; consumers can map it to the envelope tenant_id when needed."
+        },
         "device_slug": {
             "type": "string",
             "minLength": 1,

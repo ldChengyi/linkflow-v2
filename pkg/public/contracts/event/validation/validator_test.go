@@ -116,8 +116,20 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		payload map[string]any
 	}{
 		{
+			name: "missing tenant_slug",
+			payload: map[string]any{
+				"device_slug": "dev-001",
+				"product_key": "esp32",
+				"protocol":    "mqtt",
+				"properties": map[string]any{
+					"temperature": 23.5,
+				},
+			},
+		},
+		{
 			name: "missing device_slug",
 			payload: map[string]any{
+				"tenant_slug": "default",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
 				"properties": map[string]any{
@@ -128,6 +140,7 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "missing properties",
 			payload: map[string]any{
+				"tenant_slug": "default",
 				"device_slug": "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
@@ -136,6 +149,7 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "empty properties",
 			payload: map[string]any{
+				"tenant_slug": "default",
 				"device_slug": "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
@@ -145,6 +159,7 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "invalid property name",
 			payload: map[string]any{
+				"tenant_slug": "default",
 				"device_slug": "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
@@ -156,6 +171,7 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "unsupported property value type",
 			payload: map[string]any{
+				"tenant_slug": "default",
 				"device_slug": "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
@@ -175,6 +191,18 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 				t.Fatal("ValidateEvent() error = nil, want validation error")
 			}
 		})
+	}
+}
+
+func TestValidateEventRejectsInvalidPropertySetAcknowledgedPayload(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	env := validPropertySetAcknowledgedEvent()
+	payload := env["payload"].(map[string]any)
+	delete(payload, "tenant_slug")
+
+	if _, err := registry.ValidateEvent(mustMarshalJSON(t, env)); err == nil {
+		t.Fatal("ValidateEvent() error = nil, want validation error")
 	}
 }
 
@@ -198,6 +226,7 @@ func validPropertyEvent() map[string]any {
 		"producer":      "mqtt-gateway",
 		"tenant_id":     "default",
 		"payload": map[string]any{
+			"tenant_slug": "default",
 			"device_slug": "dev-001",
 			"product_key": "esp32",
 			"protocol":    "mqtt",
@@ -219,6 +248,7 @@ func validPropertySetAcknowledgedEvent() map[string]any {
 		"producer":      "mqtt-gateway",
 		"tenant_id":     "default",
 		"payload": map[string]any{
+			"tenant_slug": "default",
 			"device_slug": "dev-001",
 			"product_key": "esp32",
 			"protocol":    "mqtt",

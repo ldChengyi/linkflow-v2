@@ -43,6 +43,59 @@ func (s *PostgresDeviceStore) FindDeviceProductAuthType(ctx context.Context, in 
 	return authType, nil
 }
 
+func (s *PostgresDeviceStore) FindMQTTDeviceCredential(ctx context.Context, in service.MQTTAuthInput) (service.MQTTDeviceCredential, error) {
+	if err := ctx.Err(); err != nil {
+		return service.MQTTDeviceCredential{}, err
+	}
+
+	const query = `
+SELECT
+    t.id::text,
+    p.id::text,
+    d.id::text,
+    t.tenant_slug,
+    p.product_key,
+    d.device_slug,
+    p.auth_type,
+    t.status,
+    p.status,
+    d.status,
+    COALESCE(dc.status, ''),
+    COALESCE(dc.secret_hash, '')
+FROM tenants t
+JOIN products p ON p.tenant_id = t.id
+JOIN devices d ON d.tenant_id = t.id AND d.product_id = p.id
+LEFT JOIN device_credentials dc ON dc.tenant_id = t.id AND dc.device_id = d.id AND dc.status = 'active'
+WHERE lower(t.tenant_slug) = $1
+  AND ($2 = '' OR lower(p.product_key) = $2)
+  AND lower(d.device_slug) = $3`
+
+	var cred service.MQTTDeviceCredential
+	err := s.actor.withInternalService(ctx, "backend", func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, in.TenantSlug, in.ProductKey, in.DeviceSlug).Scan(
+			&cred.TenantID,
+			&cred.ProductID,
+			&cred.DeviceID,
+			&cred.TenantSlug,
+			&cred.ProductKey,
+			&cred.DeviceSlug,
+			&cred.ProductAuthType,
+			&cred.TenantStatus,
+			&cred.ProductStatus,
+			&cred.DeviceStatus,
+			&cred.CredentialStatus,
+			&cred.SecretHash,
+		)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.MQTTDeviceCredential{}, service.ErrDeviceNotFound
+		}
+		return service.MQTTDeviceCredential{}, fmt.Errorf("find mqtt device credential: %w", err)
+	}
+	return cred, nil
+}
+
 func (s *PostgresDeviceStore) CreateDevice(ctx context.Context, in service.DeviceCreateInput) (service.Device, error) {
 	if err := ctx.Err(); err != nil {
 		return service.Device{}, err

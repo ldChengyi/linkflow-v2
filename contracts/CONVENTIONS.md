@@ -33,7 +33,7 @@ For domains without a natural sub-resource, use a stable resource name instead o
 
 Subjects MUST NOT contain:
 
-- tenant identifiers (`tenant_id` belongs in the payload)
+- tenant identifiers (`tenant_id` belongs in the envelope; `tenant_slug` belongs in the payload when a protocol boundary needs a slug)
 - device slugs (`device_slug` belongs in the payload)
 - environment names (`prod`, `staging` — handled by deployment, not subject)
 - timestamps
@@ -64,7 +64,7 @@ Each state transition should produce its own event. Do not collapse multiple tra
 
 - All field names use `snake_case`.
 - Time fields end in `_at` (e.g. `occurred_at`, `created_at`).
-- ID fields end in `_id` (e.g. `event_id`, `tenant_id`). Platform-facing device identifiers use `device_slug`.
+- ID fields end in `_id` (e.g. `event_id`, `tenant_id`). Platform-facing identifiers use `_slug`, such as `tenant_slug` and `device_slug`.
 - Boolean fields are positive statements, not negations (`is_active`, not `is_not_inactive`).
 
 ## Time Format
@@ -182,6 +182,8 @@ Producers should ensure that retrying the same business operation produces event
 ## Tenant Isolation
 
 Every event carries `tenant_id` in the envelope. Consumers MUST filter by `tenant_id` when storing or querying data. The current implementation may use `"default"` as a placeholder until multi-tenancy is fully enabled, but the field is mandatory from day one.
+
+Events produced from protocol boundaries may also carry `tenant_slug` in the payload. This is the external routing identity from MQTT/HTTP topics or paths. Producers should preserve it for auditability and downstream resolution, but storage and authorization still use the envelope `tenant_id`.
 
 ## Trace Propagation
 

@@ -28,8 +28,9 @@ func TestDevicePropertyPostPublishesPropertyReportedEvent(t *testing.T) {
 	h := DevicePropertyPost(event.DevicePropertyReported, factory, pub)
 
 	err := h.Handle(context.Background(), router.ParsedMessage{
-		Topic: "lf/v1/esp32/dev-001/property/up/post",
+		Topic: "lf/v1/default/esp32/dev-001/property/up/post",
 		Vars: map[string]string{
+			"tenant_slug": "default",
 			"product_key": "esp32",
 			"device_slug": "dev-001",
 		},
@@ -63,6 +64,9 @@ func TestDevicePropertyPostPublishesPropertyReportedEvent(t *testing.T) {
 		t.Fatalf("json.Unmarshal(env.Payload) error = %v", err)
 	}
 
+	if payload.TenantSlug != "default" {
+		t.Fatalf("TenantSlug = %q", payload.TenantSlug)
+	}
 	if payload.DeviceSlug != "dev-001" {
 		t.Fatalf("DeviceSlug = %q", payload.DeviceSlug)
 	}
@@ -93,8 +97,9 @@ func TestDevicePropertyPostReturnsErrorForInvalidJSON(t *testing.T) {
 	h := DevicePropertyPost(event.DevicePropertyReported, factory, pub)
 
 	err := h.Handle(context.Background(), router.ParsedMessage{
-		Topic: "lf/v1/esp32/dev-001/property/up/post",
+		Topic: "lf/v1/default/esp32/dev-001/property/up/post",
 		Vars: map[string]string{
+			"tenant_slug": "default",
 			"product_key": "esp32",
 			"device_slug": "dev-001",
 		},

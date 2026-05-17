@@ -62,6 +62,7 @@ Current admin route model:
 - `/admin/tenants/products`: product management route
 - `/admin/tenants/thingsmodels`: thing model management route
 - `/admin/tenants/devices`: device management route
+- `/admin/tenants/device-properties`: device latest properties and history trend route
 - `/admin/audit-logs`: audit log list route
 - `/admin/settings`: settings route
 

@@ -22,7 +22,7 @@ type propertySetReplyMessage struct {
 //
 // MQTT topic shape:
 //
-//	lf/v1/{product_key}/{device_slug}/property/up/set_reply
+//	lf/v1/{tenant_slug}/{product_key}/{device_slug}/property/up/set_reply
 func DevicePropertySetReply(spec event.Spec, ef event.EnvelopeFactory, pub publisher.Publisher) router.Handler {
 	return router.HandlerFunc(func(ctx context.Context, msg router.ParsedMessage) error {
 		var in propertySetReplyMessage
@@ -39,6 +39,7 @@ func DevicePropertySetReply(spec event.Spec, ef event.EnvelopeFactory, pub publi
 		}
 
 		p := event.PropertySetAcknowledgedPayload{
+			TenantSlug: msg.Vars["tenant_slug"],
 			DeviceSlug: msg.Vars["device_slug"],
 			ProductKey: msg.Vars["product_key"],
 			Protocol:   "mqtt",

@@ -18,6 +18,7 @@ type Options struct {
 	Product      *handler.ProductHandler
 	ThingsModel  *handler.ThingsModelHandler
 	Device       *handler.DeviceHandler
+	EMQXAuth     *handler.EMQXAuthHandler
 	AuditLog     *handler.AuditHandler
 	Authenticate middleware.Middleware
 	Audit        middleware.Middleware
@@ -50,6 +51,9 @@ func New(cfg config.Config, log *slog.Logger, opt Options) (*http.Server, error)
 	}
 	if opt.Device != nil {
 		opt.Device.RegisterRoutes(routes, opt.Authenticate, opt.Audit)
+	}
+	if opt.EMQXAuth != nil {
+		opt.EMQXAuth.RegisterRoutes(routes)
 	}
 	if opt.AuditLog != nil {
 		opt.AuditLog.RegisterRoutes(routes, opt.Authenticate)

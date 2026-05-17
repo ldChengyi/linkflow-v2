@@ -117,6 +117,7 @@ type DeviceProductAuthInput struct {
 type DeviceSecretManager interface {
 	Generate() (string, error)
 	Hash(secret string) (string, error)
+	Compare(hash string, secret string) error
 }
 
 type DeviceService struct {

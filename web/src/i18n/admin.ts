@@ -17,6 +17,7 @@ export const adminMessages = {
     adminProductsNav: '产品管理',
     adminThingsModelsNav: '物模型管理',
     adminDevicesNav: '设备管理',
+    adminDevicePropertiesNav: '设备属性',
     adminAuditLogsNav: '审计日志',
     adminDeviceManagementNav: '设备管理',
     adminSettingsNav: '设置',
@@ -34,6 +35,9 @@ export const adminMessages = {
       '物模型管理用于维护产品级能力定义，包括属性、事件和服务的版本化 JSON 合约。',
     adminDevicesTitle: '设备管理',
     adminDevicesSummary: '设备管理用于维护租户下的设备、产品绑定和运行状态。',
+    adminDevicePropertiesTitle: '设备属性',
+    adminDevicePropertiesSummary:
+      '设备属性用于查看设备最新上报的属性值，以及后续接入历史属性变化趋势。',
     adminAuditLogsTitle: '审计日志',
     adminAuditLogsSummary:
       '审计日志展示当前账号可见的业务操作记录，数据由后端 RLS 控制。',
@@ -56,6 +60,8 @@ export const adminMessages = {
       '产品下的物模型版本、发布状态和当前模型会放在这里。',
     adminEntryDevicesDescription:
       '租户下的设备、产品绑定和运行状态会放在这里。',
+    adminEntryDevicePropertiesDescription:
+      '设备最新属性和历史属性趋势会放在这里。',
     adminEntryAuditLogsDescription:
       '租户创建、更新、删除等业务操作日志会放在这里。',
     adminEntryDeviceManagementDescription:
@@ -70,6 +76,8 @@ export const adminMessages = {
     adminThingsModelsContent:
       '物模型管理模块用于维护产品的属性、事件和服务定义。',
     adminDevicesContent: '设备管理模块用于维护设备实例和产品绑定关系。',
+    adminDevicePropertiesContent:
+      '设备属性模块用于查看设备最新属性和历史变化图表。',
     adminAuditLogsContent: '审计日志模块用于查询当前账号可见的业务操作记录。',
     adminDeviceManagementContent:
       '设备管理模块建议先实现设备列表，再增加设备详情、产品绑定和调试入口。',
@@ -270,6 +278,30 @@ export const adminMessages = {
     adminDeviceDeleteSuccess: '设备已删除',
     adminDeviceDeleteFailed: '删除设备失败',
     adminDeviceDeleteConfirm: '确认删除这个设备？',
+    adminDevicePropertyLatestTab: '最新属性',
+    adminDevicePropertyHistoryTab: '历史趋势',
+    adminDevicePropertySelectDevice: '设备',
+    adminDevicePropertyNoDevice: '暂无可选设备',
+    adminDevicePropertyLoadLatest: '刷新最新属性',
+    adminDevicePropertyLoadingLatest: '正在加载最新属性...',
+    adminDevicePropertyLatestEmpty: '暂无最新属性',
+    adminDevicePropertyLatestEmptyDescription:
+      '设备上报属性后，最新属性会显示为卡片。',
+    adminDevicePropertyReported: '已上报',
+    adminDevicePropertyNotReported: '未上报',
+    adminDevicePropertyOccurredAt: '发生时间',
+    adminDevicePropertyReceivedAt: '接收时间',
+    adminDevicePropertyProductKey: '产品标识',
+    adminDevicePropertyDeviceSlug: '设备标识',
+    adminDevicePropertyKey: '属性',
+    adminDevicePropertyValue: '值',
+    adminDevicePropertyValueType: '类型',
+    adminDevicePropertyHistoryTitle: '属性变化图表',
+    adminDevicePropertyHistoryEmpty:
+      '后端还没有历史属性查询接口，当前只展示图表结构。',
+    adminDevicePropertyHistoryHint:
+      '接入历史接口后，这里会按设备和属性绘制时间序列。',
+    adminDevicePropertyLatestFailed: '最新属性加载失败',
     adminAuditAction: '动作',
     adminAuditResource: '资源',
     adminAuditResult: '结果',
@@ -338,6 +370,7 @@ export const adminMessages = {
     adminProductsNav: 'Product management',
     adminThingsModelsNav: 'Thing model management',
     adminDevicesNav: 'Device management',
+    adminDevicePropertiesNav: 'Device properties',
     adminAuditLogsNav: 'Audit logs',
     adminDeviceManagementNav: 'Device management',
     adminSettingsNav: 'Settings',
@@ -357,6 +390,9 @@ export const adminMessages = {
     adminDevicesTitle: 'Device management',
     adminDevicesSummary:
       'Manage tenant devices, product bindings, and runtime state.',
+    adminDevicePropertiesTitle: 'Device properties',
+    adminDevicePropertiesSummary:
+      'Inspect latest reported device properties and later connect historical trends.',
     adminAuditLogsTitle: 'Audit logs',
     adminAuditLogsSummary:
       'Audit logs show business operation records visible to the current account, controlled by backend RLS.',
@@ -380,6 +416,8 @@ export const adminMessages = {
       'Product thing model versions, publish status, and current model selection will live here.',
     adminEntryDevicesDescription:
       'Tenant devices, product bindings, and runtime state will live here.',
+    adminEntryDevicePropertiesDescription:
+      'Latest device properties and historical trends will live here.',
     adminEntryAuditLogsDescription:
       'Business operation logs such as tenant create, update, and delete will live here.',
     adminEntryDeviceManagementDescription:
@@ -396,6 +434,8 @@ export const adminMessages = {
       'Thing model management maintains product property, event, and service definitions.',
     adminDevicesContent:
       'Device management maintains device instances and product bindings.',
+    adminDevicePropertiesContent:
+      'Device properties show latest values and historical trend charts.',
     adminAuditLogsContent:
       'Audit logs query business operation records visible to the current account.',
     adminDeviceManagementContent:
@@ -602,6 +642,30 @@ export const adminMessages = {
     adminDeviceDeleteSuccess: 'Device deleted',
     adminDeviceDeleteFailed: 'Failed to delete device',
     adminDeviceDeleteConfirm: 'Delete this device?',
+    adminDevicePropertyLatestTab: 'Latest properties',
+    adminDevicePropertyHistoryTab: 'History trend',
+    adminDevicePropertySelectDevice: 'Device',
+    adminDevicePropertyNoDevice: 'No devices available',
+    adminDevicePropertyLoadLatest: 'Refresh latest properties',
+    adminDevicePropertyLoadingLatest: 'Loading latest properties...',
+    adminDevicePropertyLatestEmpty: 'No latest properties',
+    adminDevicePropertyLatestEmptyDescription:
+      'Latest property cards will appear after the device reports properties.',
+    adminDevicePropertyReported: 'Reported',
+    adminDevicePropertyNotReported: 'Not reported',
+    adminDevicePropertyOccurredAt: 'Occurred at',
+    adminDevicePropertyReceivedAt: 'Received at',
+    adminDevicePropertyProductKey: 'Product key',
+    adminDevicePropertyDeviceSlug: 'Device slug',
+    adminDevicePropertyKey: 'Property',
+    adminDevicePropertyValue: 'Value',
+    adminDevicePropertyValueType: 'Type',
+    adminDevicePropertyHistoryTitle: 'Property trend chart',
+    adminDevicePropertyHistoryEmpty:
+      'The backend historical property API is not available yet, so this tab shows the chart structure.',
+    adminDevicePropertyHistoryHint:
+      'After the history API is connected, this area will render time series by device and property.',
+    adminDevicePropertyLatestFailed: 'Failed to load latest properties',
     adminAuditAction: 'Action',
     adminAuditResource: 'Resource',
     adminAuditResult: 'Result',

@@ -122,6 +122,36 @@ func (f fakeDeviceSecretManager) Hash(secret string) (string, error) {
 	return f.hash, nil
 }
 
+func (f fakeDeviceSecretManager) Compare(hash string, secret string) error {
+	if f.err != nil {
+		return f.err
+	}
+	if hash != "hashed-"+secret {
+		return errors.New("invalid secret")
+	}
+	return nil
+}
+
+func (f *fakeDeviceStore) FindMQTTDeviceCredential(ctx context.Context, in MQTTAuthInput) (MQTTDeviceCredential, error) {
+	if f.err != nil {
+		return MQTTDeviceCredential{}, f.err
+	}
+	return MQTTDeviceCredential{
+		TenantID:         "tenant-1",
+		ProductID:        "product-1",
+		DeviceID:         "device-1",
+		TenantSlug:       in.TenantSlug,
+		ProductKey:       in.ProductKey,
+		DeviceSlug:       in.DeviceSlug,
+		ProductAuthType:  defaultProductAuthType,
+		TenantStatus:     activeProductStatus,
+		ProductStatus:    activeProductStatus,
+		DeviceStatus:     activeDeviceStatus,
+		CredentialStatus: "active",
+		SecretHash:       "hashed-device-secret",
+	}, nil
+}
+
 func TestDeviceServiceCreateNormalizesInputAndDefaults(t *testing.T) {
 	store := &fakeDeviceStore{}
 	svc := newTestDeviceService(t, store)
@@ -306,6 +336,46 @@ func TestDeviceServiceLatestPropertiesPassesNormalizedInput(t *testing.T) {
 	}
 	if !latest.Reported || latest.Properties["temperature"] != 23.5 {
 		t.Fatalf("LatestProperties result = %+v, want reported temperature", latest)
+	}
+}
+
+func TestMQTTAuthServiceAuthenticatesSecretDevice(t *testing.T) {
+	store := &fakeDeviceStore{}
+	svc, err := NewMQTTAuthService(store, fakeDeviceSecretManager{})
+	if err != nil {
+		t.Fatalf("NewMQTTAuthService() error = %v", err)
+	}
+
+	result, err := svc.Authenticate(context.Background(), MQTTAuthInput{
+		TenantSlug: " Default ",
+		ProductKey: " ESP32 ",
+		DeviceSlug: " DEV-001 ",
+		Password:   "device-secret",
+	})
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+
+	if result.TenantSlug != "default" || result.ProductKey != "esp32" || result.DeviceSlug != "dev-001" {
+		t.Fatalf("Authenticate result = %+v, want normalized slugs", result)
+	}
+}
+
+func TestMQTTAuthServiceRejectsInvalidSecret(t *testing.T) {
+	store := &fakeDeviceStore{}
+	svc, err := NewMQTTAuthService(store, fakeDeviceSecretManager{})
+	if err != nil {
+		t.Fatalf("NewMQTTAuthService() error = %v", err)
+	}
+
+	_, err = svc.Authenticate(context.Background(), MQTTAuthInput{
+		TenantSlug: "default",
+		ProductKey: "esp32",
+		DeviceSlug: "dev-001",
+		Password:   "wrong",
+	})
+	if !errors.Is(err, ErrInvalidMQTTAuth) {
+		t.Fatalf("Authenticate() error = %v, want ErrInvalidMQTTAuth", err)
 	}
 }
 

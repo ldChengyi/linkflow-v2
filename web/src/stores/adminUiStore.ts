@@ -8,6 +8,7 @@ export type AdminSectionId =
   | 'products'
   | 'thingsModels'
   | 'devices'
+  | 'deviceProperties'
   | 'auditLogs'
   | 'settings';
 
@@ -17,6 +18,7 @@ const validSectionIds: AdminSectionId[] = [
   'products',
   'thingsModels',
   'devices',
+  'deviceProperties',
   'auditLogs',
   'settings',
 ];

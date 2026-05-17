@@ -154,6 +154,14 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create device handler: %w", err)
 	}
+	mqttAuthService, err := service.NewMQTTAuthService(deviceStore, deviceSecretManager)
+	if err != nil {
+		return fmt.Errorf("create mqtt auth service: %w", err)
+	}
+	emqxAuthHandler, err := handler.NewEMQXAuthHandler(mqttAuthService, cfg.MQTTGatewayUsername, cfg.MQTTGatewayPassword, log)
+	if err != nil {
+		return fmt.Errorf("create emqx auth handler: %w", err)
+	}
 	auditStore, err := store.NewPostgresAuditStore(postgresPool)
 	if err != nil {
 		return fmt.Errorf("create audit store: %w", err)
@@ -173,6 +181,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 		Product:      productHandler,
 		ThingsModel:  thingsModelHandler,
 		Device:       deviceHandler,
+		EMQXAuth:     emqxAuthHandler,
 		AuditLog:     auditHandler,
 		Authenticate: middleware.Authenticate(tokenManager, sessionStore),
 		Audit:        middleware.Audit(auditService, log),

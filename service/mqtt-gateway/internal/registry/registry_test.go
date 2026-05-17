@@ -32,16 +32,16 @@ func TestRegisterAllRegistersPropertyPostRoute(t *testing.T) {
 	if len(subscriptions) != 2 {
 		t.Fatalf("subscriptions = %d", len(subscriptions))
 	}
-	if subscriptions[0].Topic != "lf/v1/+/+/property/up/post" {
+	if subscriptions[0].Topic != "lf/v1/+/+/+/property/up/post" {
 		t.Fatalf("subscription topic = %q", subscriptions[0].Topic)
 	}
-	if subscriptions[1].Topic != "lf/v1/+/+/property/up/set_reply" {
+	if subscriptions[1].Topic != "lf/v1/+/+/+/property/up/set_reply" {
 		t.Fatalf("subscription topic = %q", subscriptions[1].Topic)
 	}
 
 	if err := r.Dispatch(
 		context.Background(),
-		"lf/v1/esp32/dev-001/property/up/post",
+		"lf/v1/default/esp32/dev-001/property/up/post",
 		[]byte(`{"temperature":23.5}`),
 	); err != nil {
 		t.Fatalf("Dispatch() error = %v", err)

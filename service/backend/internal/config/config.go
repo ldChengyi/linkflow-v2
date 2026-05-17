@@ -36,6 +36,9 @@ type Config struct {
 	AuthAccessTokenSecret string
 	AuthTokenIssuer       string
 	AuthBCryptCost        int
+
+	MQTTGatewayUsername string
+	MQTTGatewayPassword string
 }
 
 func Load() (Config, error) {
@@ -134,6 +137,8 @@ func Load() (Config, error) {
 		AuthAccessTokenSecret: getEnv("AUTH_ACCESS_TOKEN_SECRET", defaultAuthAccessTokenSecret),
 		AuthTokenIssuer:       getEnv("AUTH_TOKEN_ISSUER", defaultAuthTokenIssuer),
 		AuthBCryptCost:        bcryptCost,
+		MQTTGatewayUsername:   getEnv("MQTT_GATEWAY_USERNAME", "linkflow-mqtt-gateway"),
+		MQTTGatewayPassword:   getEnv("MQTT_GATEWAY_PASSWORD", "linkflow-mqtt-gateway-secret"),
 	}
 
 	if cfg.HTTPAddr == "" {
@@ -153,6 +158,12 @@ func Load() (Config, error) {
 	}
 	if cfg.AuthTokenIssuer == "" {
 		return Config{}, fmt.Errorf("AUTH_TOKEN_ISSUER is required")
+	}
+	if cfg.MQTTGatewayUsername == "" {
+		return Config{}, fmt.Errorf("MQTT_GATEWAY_USERNAME is required")
+	}
+	if cfg.MQTTGatewayPassword == "" {
+		return Config{}, fmt.Errorf("MQTT_GATEWAY_PASSWORD is required")
 	}
 
 	return cfg, nil

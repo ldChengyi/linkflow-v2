@@ -13,6 +13,7 @@ func TestEnvelopeFactoryNewCreatesEnvelope(t *testing.T) {
 	}
 
 	payload := map[string]any{
+		"tenant_slug": "default",
 		"device_slug": "dev-001",
 		"product_key": "esp32",
 		"protocol":    "mqtt",
@@ -53,6 +54,9 @@ func TestEnvelopeFactoryNewCreatesEnvelope(t *testing.T) {
 	}
 	if gotPayload["device_slug"] != "dev-001" {
 		t.Fatalf("payload device_slug = %v", gotPayload["device_slug"])
+	}
+	if gotPayload["tenant_slug"] != "default" {
+		t.Fatalf("payload tenant_slug = %v", gotPayload["tenant_slug"])
 	}
 }
 

@@ -19,8 +19,9 @@ func TestDevicePropertySetReplyPublishesAcknowledgedEvent(t *testing.T) {
 	h := DevicePropertySetReply(event.DevicePropertySetAcknowledged, factory, pub)
 
 	err := h.Handle(context.Background(), router.ParsedMessage{
-		Topic: "lf/v1/esp32/dev-001/property/up/set_reply",
+		Topic: "lf/v1/default/esp32/dev-001/property/up/set_reply",
 		Vars: map[string]string{
+			"tenant_slug": "default",
 			"product_key": "esp32",
 			"device_slug": "dev-001",
 		},
@@ -47,6 +48,9 @@ func TestDevicePropertySetReplyPublishesAcknowledgedEvent(t *testing.T) {
 		t.Fatalf("json.Unmarshal(env.Payload) error = %v", err)
 	}
 
+	if payload.TenantSlug != "default" {
+		t.Fatalf("TenantSlug = %q", payload.TenantSlug)
+	}
 	if payload.DeviceSlug != "dev-001" {
 		t.Fatalf("DeviceSlug = %q", payload.DeviceSlug)
 	}
@@ -80,8 +84,9 @@ func TestDevicePropertySetReplyReturnsErrorForMissingSuccess(t *testing.T) {
 	h := DevicePropertySetReply(event.DevicePropertySetAcknowledged, factory, pub)
 
 	err := h.Handle(context.Background(), router.ParsedMessage{
-		Topic: "lf/v1/esp32/dev-001/property/up/set_reply",
+		Topic: "lf/v1/default/esp32/dev-001/property/up/set_reply",
 		Vars: map[string]string{
+			"tenant_slug": "default",
 			"product_key": "esp32",
 			"device_slug": "dev-001",
 		},

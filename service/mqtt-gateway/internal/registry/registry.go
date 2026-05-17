@@ -26,16 +26,16 @@ func Routes(ef event.EnvelopeFactory, pub publisher.Publisher) []RouteSpec {
 	return []RouteSpec{
 		{
 			Event:      event.DevicePropertyReported,
-			MQTTFilter: "lf/v1/+/+/property/up/post",
+			MQTTFilter: "lf/v1/+/+/+/property/up/post",
 			QOS:        1,
-			Pattern:    `^lf/v1/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
+			Pattern:    `^lf/v1/(?P<tenant_slug>[^/]+)/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
 			Handler:    handler.DevicePropertyPost(event.DevicePropertyReported, ef, pub),
 		},
 		{
 			Event:      event.DevicePropertySetAcknowledged,
-			MQTTFilter: "lf/v1/+/+/property/up/set_reply",
+			MQTTFilter: "lf/v1/+/+/+/property/up/set_reply",
 			QOS:        1,
-			Pattern:    `^lf/v1/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/set_reply$`,
+			Pattern:    `^lf/v1/(?P<tenant_slug>[^/]+)/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/set_reply$`,
 			Handler:    handler.DevicePropertySetReply(event.DevicePropertySetAcknowledged, ef, pub),
 		},
 	}

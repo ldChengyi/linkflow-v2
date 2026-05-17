@@ -25,17 +25,126 @@ services:
       EMQX_HOST: 127.0.0.1
       EMQX_DASHBOARD__DEFAULT_USERNAME: admin
       EMQX_DASHBOARD__DEFAULT_PASSWORD: public
-      # 允许匿名连接 (开发环境用,生产环境关闭)
-      EMQX_ALLOW_ANONYMOUS: "true"
+      EMQX_API_KEY__BOOTSTRAP_FILE: /opt/emqx/etc/default_api_key.conf
+      EMQX_ALLOW_ANONYMOUS: "false"
     volumes:
       - emqx_data:/opt/emqx/data
       - emqx_log:/opt/emqx/log
+      - ./init-scripts/emqx/default_api_key.conf:/opt/emqx/etc/default_api_key.conf:ro
     healthcheck:
       test: [ "CMD", "/opt/emqx/bin/emqx", "ctl", "status" ]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
+    networks:
+      - linkflow
+
+  emqx-init:
+    image: curlimages/curl:8.8.0
+    container_name: linkflow-emqx-init
+    restart: "no"
+    depends_on:
+      emqx:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    environment:
+      EMQX_API_URL: http://emqx:18083
+      EMQX_API_KEY: linkflow-init
+      EMQX_API_SECRET: linkflow-init-secret
+      BACKEND_AUTH_URL: http://backend:18080/internal/emqx/auth
+    volumes:
+      - ./init-scripts/emqx:/init-scripts/emqx:ro
+    entrypoint:
+      - /bin/sh
+    command:
+      - /init-scripts/emqx/init-http-auth.sh
+    networks:
+      - linkflow
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/docker/backend.Dockerfile
+      args:
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+        GOSUMDB: ${GOSUMDB:-sum.golang.org}
+    container_name: linkflow-backend
+    restart: unless-stopped
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "18080:18080"
+    environment:
+      HTTP_ADDR: :18080
+      POSTGRES_DSN: postgres://linkflow:linkflow123@timescaledb:5432/linkflow?sslmode=disable
+      REDIS_ADDR: redis:6379
+      AUTH_ACCESS_TOKEN_SECRET: dev-only-linkflow-access-token-secret-change-before-production
+      MQTT_GATEWAY_USERNAME: linkflow-mqtt-gateway
+      MQTT_GATEWAY_PASSWORD: linkflow-mqtt-gateway-secret
+    healthcheck:
+      test: [ "CMD", "wget", "-qO-", "http://127.0.0.1:18080/internal/emqx/healthz" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - linkflow
+
+  device-event-processor:
+    build:
+      context: ..
+      dockerfile: deploy/docker/device-event-processor.Dockerfile
+      args:
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+        GOSUMDB: ${GOSUMDB:-sum.golang.org}
+    container_name: linkflow-device-event-processor
+    restart: unless-stopped
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      timescaledb:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_GROUP_ID: device-event-processor
+      POSTGRES_DSN: postgres://linkflow:linkflow123@timescaledb:5432/linkflow?sslmode=disable
+      CONTRACTS_DIR: /app/contracts
+    networks:
+      - linkflow
+
+  mqtt-gateway:
+    build:
+      context: ..
+      dockerfile: deploy/docker/mqtt-gateway.Dockerfile
+      args:
+        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+        GOSUMDB: ${GOSUMDB:-sum.golang.org}
+    container_name: linkflow-mqtt-gateway
+    restart: unless-stopped
+    depends_on:
+      emqx:
+        condition: service_healthy
+      emqx-init:
+        condition: service_completed_successfully
+      redpanda:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+    environment:
+      MQTT_BROKER_URL: tcp://emqx:1883
+      MQTT_CLIENT_ID: linkflow-mqtt-gateway
+      MQTT_USERNAME: linkflow-mqtt-gateway
+      MQTT_PASSWORD: linkflow-mqtt-gateway-secret
+      MQTT_CLEAN_SESSION: "true"
+      KAFKA_BROKER_URL: redpanda:9092
+      LF_TENANT_ID: default
     networks:
       - linkflow
 

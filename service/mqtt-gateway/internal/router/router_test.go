@@ -13,11 +13,11 @@ func TestRouterDispatchMatchesRouteAndExtractsVars(t *testing.T) {
 
 	err := r.Handle(
 		"device.property.post",
-		`^lf/v1/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
+		`^lf/v1/(?P<tenant_slug>[^/]+)/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
 		HandlerFunc(func(ctx context.Context, msg ParsedMessage) error {
 			called = true
 
-			if msg.Topic != "lf/v1/esp32/dev-001/property/up/post" {
+			if msg.Topic != "lf/v1/default/esp32/dev-001/property/up/post" {
 				t.Fatalf("Topic = %q", msg.Topic)
 			}
 			if string(msg.Payload) != `{"temperature":23.5}` {
@@ -25,6 +25,9 @@ func TestRouterDispatchMatchesRouteAndExtractsVars(t *testing.T) {
 			}
 			if msg.Vars["product_key"] != "esp32" {
 				t.Fatalf("product_key = %q", msg.Vars["product_key"])
+			}
+			if msg.Vars["tenant_slug"] != "default" {
+				t.Fatalf("tenant_slug = %q", msg.Vars["tenant_slug"])
 			}
 			if msg.Vars["device_slug"] != "dev-001" {
 				t.Fatalf("device_slug = %q", msg.Vars["device_slug"])
@@ -39,7 +42,7 @@ func TestRouterDispatchMatchesRouteAndExtractsVars(t *testing.T) {
 
 	if err := r.Dispatch(
 		context.Background(),
-		"lf/v1/esp32/dev-001/property/up/post",
+		"lf/v1/default/esp32/dev-001/property/up/post",
 		[]byte(`{"temperature":23.5}`),
 	); err != nil {
 		t.Fatalf("Dispatch() error = %v", err)
@@ -55,7 +58,7 @@ func TestRouterDispatchDoesNotCallHandlerWhenNoRouteMatches(t *testing.T) {
 
 	err := r.Handle(
 		"device.property.post",
-		`^lf/v1/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
+		`^lf/v1/(?P<tenant_slug>[^/]+)/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
 		HandlerFunc(func(ctx context.Context, msg ParsedMessage) error {
 			t.Fatal("handler should not be called")
 			return nil
@@ -65,7 +68,7 @@ func TestRouterDispatchDoesNotCallHandlerWhenNoRouteMatches(t *testing.T) {
 		t.Fatalf("Handle() error = %v", err)
 	}
 
-	if err := r.Dispatch(context.Background(), "lf/v1/esp32/dev-001/event/up/post", []byte(`{}
+	if err := r.Dispatch(context.Background(), "lf/v1/default/esp32/dev-001/event/up/post", []byte(`{}
 `)); err == nil {
 		t.Fatal("Dispatch() error is nil, want no route error")
 	}
@@ -76,7 +79,7 @@ func TestRouterDispatchDoesNotPanicWhenHandlerReturnsError(t *testing.T) {
 
 	err := r.Handle(
 		"device.property.post",
-		`^lf/v1/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
+		`^lf/v1/(?P<tenant_slug>[^/]+)/(?P<product_key>[^/]+)/(?P<device_slug>[^/]+)/property/up/post$`,
 		HandlerFunc(func(ctx context.Context, msg ParsedMessage) error {
 			return errors.New("handler failed")
 		}),
@@ -87,7 +90,7 @@ func TestRouterDispatchDoesNotPanicWhenHandlerReturnsError(t *testing.T) {
 
 	if err := r.Dispatch(
 		context.Background(),
-		"lf/v1/esp32/dev-001/property/up/post",
+		"lf/v1/default/esp32/dev-001/property/up/post",
 		[]byte(`{"temperature":23.5}`),
 	); err == nil {
 		t.Fatal("Dispatch() error is nil, want handler error")

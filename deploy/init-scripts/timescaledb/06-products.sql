@@ -95,6 +95,19 @@ BEGIN
         FROM pg_policies
         WHERE schemaname = current_schema()
           AND tablename = 'products'
+          AND policyname = 'products_select_for_internal_service'
+    ) THEN
+        CREATE POLICY products_select_for_internal_service
+            ON products
+            FOR SELECT
+            USING (current_app_internal_service() = 'backend');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = current_schema()
+          AND tablename = 'products'
           AND policyname = 'products_insert_for_tenant_owner'
     ) THEN
         CREATE POLICY products_insert_for_tenant_owner

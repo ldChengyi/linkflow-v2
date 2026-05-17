@@ -64,6 +64,14 @@ AS $$
     SELECT NULLIF(current_setting('app.current_user_id', true), '')::uuid
 $$;
 
+CREATE OR REPLACE FUNCTION current_app_internal_service()
+RETURNS text
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT NULLIF(current_setting('app.internal_service', true), '')
+$$;
+
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
 
@@ -80,6 +88,19 @@ BEGIN
             ON tenants
             FOR SELECT
             USING (owner_user_id = current_app_user_id());
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = current_schema()
+          AND tablename = 'tenants'
+          AND policyname = 'tenants_select_for_internal_service'
+    ) THEN
+        CREATE POLICY tenants_select_for_internal_service
+            ON tenants
+            FOR SELECT
+            USING (current_app_internal_service() = 'backend');
     END IF;
 
     IF NOT EXISTS (

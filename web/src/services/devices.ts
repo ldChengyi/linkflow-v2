@@ -26,6 +26,18 @@ export interface DeviceCreateResult {
   device_secret?: string;
 }
 
+export interface DeviceLatestProperties {
+  id: string;
+  tenant_id: string;
+  product_id: string;
+  product_key: string;
+  device_slug: string;
+  reported: boolean;
+  properties: Record<string, unknown>;
+  occurred_at?: string;
+  received_at?: string;
+}
+
 export interface DeviceListParams extends Record<string, unknown> {
   tenant_id: string;
   product_id?: string;
@@ -58,6 +70,15 @@ export const listDevices = (params: DeviceListParams) => {
     method: 'GET',
     params,
   });
+};
+
+export const getDeviceLatestProperties = (deviceId: string) => {
+  return apiRequest<DeviceLatestProperties>(
+    `/api/v1/devices/${deviceId}/properties/latest`,
+    {
+      method: 'GET',
+    },
+  );
 };
 
 export const createDevice = (body: DeviceCreateInput) => {
