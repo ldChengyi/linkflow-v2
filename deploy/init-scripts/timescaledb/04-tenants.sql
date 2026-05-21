@@ -72,6 +72,14 @@ AS $$
     SELECT NULLIF(current_setting('app.internal_service', true), '')
 $$;
 
+CREATE OR REPLACE FUNCTION current_app_admin_service()
+RETURNS text
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT NULLIF(current_setting('app.admin_service', true), '')
+$$;
+
 ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
 
@@ -101,6 +109,19 @@ BEGIN
             ON tenants
             FOR SELECT
             USING (current_app_internal_service() = 'backend');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = current_schema()
+          AND tablename = 'tenants'
+          AND policyname = 'tenants_select_for_admin'
+    ) THEN
+        CREATE POLICY tenants_select_for_admin
+            ON tenants
+            FOR SELECT
+            USING (current_app_admin_service() IS NOT NULL);
     END IF;
 
     IF NOT EXISTS (

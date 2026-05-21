@@ -1,0 +1,11 @@
+# Build context is the repo root (see deploy/docker-compose.yml).
+# Keep host-only artifacts out of images so multi-stage builds stay reproducible.
+
+.git
+debug-log
+
+# Web: never copy host installs; the image runs its own pnpm install.
+web/node_modules
+web/dist
+web/.umi
+web/.umi-production

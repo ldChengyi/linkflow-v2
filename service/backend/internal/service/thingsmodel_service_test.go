@@ -143,6 +143,169 @@ func TestThingsModelServiceCreateValidatesRequiredInput(t *testing.T) {
 	}
 }
 
+func TestThingsModelServiceCreateValidatesThingModelDefinition(t *testing.T) {
+	svc := newTestThingsModelService(t, &fakeThingsModelStore{})
+
+	validProperties := ThingsModelObject{
+		"temperature": map[string]any{
+			"name":        "温度",
+			"data_type":   "float",
+			"access_mode": "read",
+			"required":    true,
+			"spec": map[string]any{
+				"min":       -40,
+				"max":       125,
+				"step":      0.1,
+				"unit":      "celsius",
+				"precision": 1,
+			},
+		},
+	}
+	validEvents := ThingsModelObject{
+		"temperature_alarm": map[string]any{
+			"name":  "温度报警",
+			"level": "warning",
+			"desc":  "设备检测到温度超过安全阈值",
+			"output": map[string]any{
+				"temperature": map[string]any{
+					"name":      "当前温度",
+					"data_type": "float",
+					"required":  true,
+				},
+			},
+		},
+	}
+	validServices := ThingsModelObject{
+		"reboot": map[string]any{
+			"name":      "重启设备",
+			"call_type": "async",
+			"desc":      "平台下发重启命令",
+			"input":     map[string]any{},
+			"output": map[string]any{
+				"accepted": map[string]any{
+					"name":      "是否接受",
+					"data_type": "bool",
+					"required":  true,
+				},
+			},
+		},
+	}
+
+	if _, err := svc.Create(context.Background(), ThingsModelCreateInput{
+		UserID:       "user-1",
+		TenantID:     "tenant-1",
+		ProductID:    "product-1",
+		ModelVersion: 1,
+		ModelName:    "ESP32",
+		Properties:   validProperties,
+		Events:       validEvents,
+		Services:     validServices,
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	cases := []struct {
+		name       string
+		properties ThingsModelObject
+		events     ThingsModelObject
+		services   ThingsModelObject
+	}{
+		{
+			name: "invalid property data type",
+			properties: ThingsModelObject{
+				"temperature": map[string]any{
+					"name":        "温度",
+					"data_type":   "number",
+					"access_mode": "read",
+					"required":    true,
+				},
+			},
+		},
+		{
+			name: "invalid property spec range",
+			properties: ThingsModelObject{
+				"temperature": map[string]any{
+					"name":        "温度",
+					"data_type":   "float",
+					"access_mode": "read",
+					"required":    true,
+					"spec":        map[string]any{"min": 100, "max": 1},
+				},
+			},
+		},
+		{
+			name: "event output must be object",
+			events: ThingsModelObject{
+				"temperature_alarm": map[string]any{
+					"name":   "温度报警",
+					"level":  "warning",
+					"output": "temperature",
+				},
+			},
+		},
+		{
+			name: "event param missing required",
+			events: ThingsModelObject{
+				"temperature_alarm": map[string]any{
+					"name":  "温度报警",
+					"level": "warning",
+					"output": map[string]any{
+						"temperature": map[string]any{
+							"name":      "当前温度",
+							"data_type": "float",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "service call type invalid",
+			services: ThingsModelObject{
+				"reboot": map[string]any{
+					"name":      "重启设备",
+					"call_type": "later",
+					"input":     map[string]any{},
+					"output":    map[string]any{},
+				},
+			},
+		},
+		{
+			name: "service input param invalid identifier",
+			services: ThingsModelObject{
+				"set_report_interval": map[string]any{
+					"name":      "设置上报周期",
+					"call_type": "sync",
+					"input": map[string]any{
+						"interval-seconds": map[string]any{
+							"name":      "上报间隔",
+							"data_type": "int",
+							"required":  true,
+						},
+					},
+					"output": map[string]any{},
+				},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := svc.Create(context.Background(), ThingsModelCreateInput{
+				UserID:       "user-1",
+				TenantID:     "tenant-1",
+				ProductID:    "product-1",
+				ModelVersion: 1,
+				ModelName:    "ESP32",
+				Properties:   tc.properties,
+				Events:       tc.events,
+				Services:     tc.services,
+			}); !errors.Is(err, ErrInvalidThingsModelInput) {
+				t.Fatalf("Create() error = %v, want ErrInvalidThingsModelInput", err)
+			}
+		})
+	}
+}
+
 func TestThingsModelServiceListNormalizesPagination(t *testing.T) {
 	store := &fakeThingsModelStore{}
 	svc := newTestThingsModelService(t, store)

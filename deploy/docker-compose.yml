@@ -13,7 +13,7 @@ services:
   # MQTT TCP:  1883
   # ============================================
   emqx:
-    image: emqx/emqx:5.4.1
+    image: emqx/emqx:5.10.0
     container_name: linkflow-emqx
     restart: unless-stopped
     ports:
@@ -41,7 +41,7 @@ services:
       - linkflow
 
   emqx-init:
-    image: curlimages/curl:8.8.0
+    image: badouralix/curl-jq:latest
     container_name: linkflow-emqx-init
     restart: "no"
     depends_on:
@@ -49,17 +49,22 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+      redpanda:
+        condition: service_healthy
     environment:
       EMQX_API_URL: http://emqx:18083
       EMQX_API_KEY: linkflow-init
       EMQX_API_SECRET: linkflow-init-secret
       BACKEND_AUTH_URL: http://backend:18080/internal/emqx/auth
+      KAFKA_BOOTSTRAP: redpanda:9092 # 新增
+      KAFKA_TOPIC: lf.v1.device.events
     volumes:
       - ./init-scripts/emqx:/init-scripts/emqx:ro
     entrypoint:
       - /bin/sh
     command:
-      - /init-scripts/emqx/init-http-auth.sh
+      - -c
+      - "sh /init-scripts/emqx/init-emqx.sh" # 改这一行
     networks:
       - linkflow
 
@@ -77,6 +82,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
     ports:
       - "18080:18080"
     environment:
@@ -86,12 +95,29 @@ services:
       AUTH_ACCESS_TOKEN_SECRET: dev-only-linkflow-access-token-secret-change-before-production
       MQTT_GATEWAY_USERNAME: linkflow-mqtt-gateway
       MQTT_GATEWAY_PASSWORD: linkflow-mqtt-gateway-secret
+      KAFKA_BROKERS: redpanda:9092
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://127.0.0.1:18080/internal/emqx/healthz" ]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 10s
+    networks:
+      - linkflow
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/docker/web.Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+    container_name: linkflow-web
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
     networks:
       - linkflow
 
@@ -111,42 +137,48 @@ services:
         condition: service_completed_successfully
       timescaledb:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       KAFKA_BROKERS: redpanda:9092
       KAFKA_GROUP_ID: device-event-processor
       POSTGRES_DSN: postgres://linkflow:linkflow123@timescaledb:5432/linkflow?sslmode=disable
+      REDIS_ADDR: redis:6379
+      DEVICE_ONLINE_TTL: 120s
       CONTRACTS_DIR: /app/contracts
     networks:
       - linkflow
 
-  mqtt-gateway:
-    build:
-      context: ..
-      dockerfile: deploy/docker/mqtt-gateway.Dockerfile
-      args:
-        GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
-        GOSUMDB: ${GOSUMDB:-sum.golang.org}
-    container_name: linkflow-mqtt-gateway
-    restart: unless-stopped
-    depends_on:
-      emqx:
-        condition: service_healthy
-      emqx-init:
-        condition: service_completed_successfully
-      redpanda:
-        condition: service_healthy
-      redpanda-init:
-        condition: service_completed_successfully
-    environment:
-      MQTT_BROKER_URL: tcp://emqx:1883
-      MQTT_CLIENT_ID: linkflow-mqtt-gateway
-      MQTT_USERNAME: linkflow-mqtt-gateway
-      MQTT_PASSWORD: linkflow-mqtt-gateway-secret
-      MQTT_CLEAN_SESSION: "true"
-      KAFKA_BROKER_URL: redpanda:9092
-      LF_TENANT_ID: default
-    networks:
-      - linkflow
+  # mqtt-gateway is legacy and intentionally disabled.
+  # Current MQTT ingress path: EMQX Rule Engine -> Redpanda lf.v1.device.events.
+  # mqtt-gateway:
+  #   build:
+  #     context: ..
+  #     dockerfile: deploy/docker/mqtt-gateway.Dockerfile
+  #     args:
+  #       GOPROXY: ${GOPROXY:-https://goproxy.cn,direct}
+  #       GOSUMDB: ${GOSUMDB:-sum.golang.org}
+  #   container_name: linkflow-mqtt-gateway
+  #   restart: unless-stopped
+  #   depends_on:
+  #     emqx:
+  #       condition: service_healthy
+  #     emqx-init:
+  #       condition: service_completed_successfully
+  #     redpanda:
+  #       condition: service_healthy
+  #     redpanda-init:
+  #       condition: service_completed_successfully
+  #   environment:
+  #     MQTT_BROKER_URL: tcp://emqx:1883
+  #     MQTT_CLIENT_ID: linkflow-mqtt-gateway
+  #     MQTT_USERNAME: linkflow-mqtt-gateway
+  #     MQTT_PASSWORD: linkflow-mqtt-gateway-secret
+  #     MQTT_CLEAN_SESSION: "true"
+  #     KAFKA_BROKER_URL: redpanda:9092
+  #     LF_TENANT_ID: default
+  #   networks:
+  #     - linkflow
 
   # ============================================
   # Redpanda - Kafka 协议兼容的消息总线

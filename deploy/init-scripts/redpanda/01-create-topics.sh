@@ -20,3 +20,4 @@ create_topic_if_missing() {
 }
 
 create_topic_if_missing "lf.v1.device.events" "1" "1"
+create_topic_if_missing "lf.v1.device.state" "1" "1"

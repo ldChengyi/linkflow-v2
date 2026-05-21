@@ -1,4 +1,5 @@
 import { useI18n } from '@/contexts/I18nContext';
+import { useDevicesRealtime } from '@/hooks/useDevicesRealtime';
 import type { AdminMessageKey } from '@/i18n/admin';
 import {
   createDevice,
@@ -25,6 +26,10 @@ import { useEffect, useState } from 'react';
 import AdminDataTable, {
   type AdminDataTableColumn,
 } from './components/AdminDataTable';
+import RealtimeStatusBadge, {
+  isRealtimeFallbackStatus,
+  realtimeFallbackRefreshMs,
+} from './components/RealtimeStatusBadge';
 
 interface DeviceFormState {
   product_id: string;
@@ -190,14 +195,20 @@ const DeviceManagement = () => {
     };
   }, [tenantId, t]);
 
-  const loadDevices = async (nextPage = page, nextPageSize = pageSize) => {
+  const loadDevices = async (
+    nextPage = page,
+    nextPageSize = pageSize,
+    options: { silent?: boolean } = {},
+  ) => {
     if (!tenantId) {
       setDevices([]);
       setTotal(0);
       return;
     }
 
-    setLoading(true);
+    if (!options.silent) {
+      setLoading(true);
+    }
     try {
       const result = await listDevices({
         tenant_id: tenantId,
@@ -216,7 +227,9 @@ const DeviceManagement = () => {
         placement: 'topRight',
       });
     } finally {
-      setLoading(false);
+      if (!options.silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -267,6 +280,65 @@ const DeviceManagement = () => {
       cancelled = true;
     };
   }, [page, pageSize, productFilter, tenantId, t]);
+
+  const { status: realtimeStatus } = useDevicesRealtime({
+    enabled: Boolean(tenantId),
+    onConnectionChanged: (payload, meta) => {
+      if (meta.tenantId !== tenantId) {
+        return;
+      }
+      setDevices((current) => {
+        let changed = false;
+        const next = current.map((device) => {
+          if (device.id !== payload.device_id) {
+            return device;
+          }
+          changed = true;
+          return {
+            ...device,
+            connection_status: payload.status,
+            last_seen_at: meta.occurredAt,
+            updated_at: meta.occurredAt,
+          };
+        });
+        return changed ? next : current;
+      });
+    },
+    onPropertyChanged: (payload, meta) => {
+      if (meta.tenantId !== tenantId) {
+        return;
+      }
+      setDevices((current) => {
+        let changed = false;
+        const next = current.map((device) => {
+          if (device.id !== payload.device_id) {
+            return device;
+          }
+          changed = true;
+          return {
+            ...device,
+            last_seen_at: meta.occurredAt,
+            updated_at: meta.occurredAt,
+          };
+        });
+        return changed ? next : current;
+      });
+    },
+  });
+
+  useEffect(() => {
+    if (!tenantId || !isRealtimeFallbackStatus(realtimeStatus)) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void loadDevices(page, pageSize, { silent: true });
+    }, realtimeFallbackRefreshMs);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [page, pageSize, productFilter, realtimeStatus, tenantId]);
 
   const updateFormField = <K extends keyof DeviceFormState>(
     key: K,
@@ -585,15 +657,18 @@ const DeviceManagement = () => {
             </select>
           </label>
         </div>
-        <button
-          type="button"
-          className="inline-flex h-11 items-center gap-2 rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft disabled:cursor-not-allowed disabled:opacity-60 dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
-          onClick={openCreateForm}
-          disabled={!tenantId || products.length === 0}
-        >
-          <PlusOutlined aria-hidden="true" />
-          {t('adminDeviceCreate')}
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <RealtimeStatusBadge status={realtimeStatus} />
+          <button
+            type="button"
+            className="inline-flex h-11 items-center gap-2 rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft disabled:cursor-not-allowed disabled:opacity-60 dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
+            onClick={openCreateForm}
+            disabled={!tenantId || products.length === 0}
+          >
+            <PlusOutlined aria-hidden="true" />
+            {t('adminDeviceCreate')}
+          </button>
+        </div>
       </div>
 
       {formMode ? (

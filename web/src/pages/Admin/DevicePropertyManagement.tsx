@@ -1,4 +1,5 @@
 import { useI18n } from '@/contexts/I18nContext';
+import { useDevicesRealtime } from '@/hooks/useDevicesRealtime';
 import {
   getDeviceLatestProperties,
   listDevices,
@@ -16,6 +17,10 @@ import {
 } from '@ant-design/icons';
 import { notification } from 'antd';
 import { useEffect, useState } from 'react';
+import RealtimeStatusBadge, {
+  isRealtimeFallbackStatus,
+  realtimeFallbackRefreshMs,
+} from './components/RealtimeStatusBadge';
 
 type DevicePropertyTab = 'latest' | 'history';
 
@@ -25,15 +30,6 @@ const tabButtonClassName = (active: boolean) => {
     active
       ? 'border-linkflow-primary text-linkflow-primary'
       : 'border-transparent text-linkflow-muted hover:text-linkflow-primary dark:text-linkflow-dark-muted dark:hover:text-linkflow-dark-primary',
-  ].join(' ');
-};
-
-const statusBadgeClassName = (reported: boolean) => {
-  return [
-    'inline-flex rounded-full px-2.5 py-1 text-xs font-bold',
-    reported
-      ? 'bg-linkflow-primary-soft text-linkflow-primary'
-      : 'bg-slate-100 text-linkflow-muted dark:bg-slate-800 dark:text-linkflow-dark-muted',
   ].join(' ');
 };
 
@@ -65,6 +61,23 @@ const formatPropertyValue = (value: unknown) => {
   return JSON.stringify(value, null, 2);
 };
 
+const isStructuredPropertyValue = (value: unknown) => {
+  return typeof value === 'object' && value !== null;
+};
+
+const valueTypeBadgeClassName = (type: string) => {
+  return [
+    'shrink-0 rounded-full px-2.5 py-1 text-xs font-black uppercase leading-none',
+    type === 'number'
+      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+      : type === 'boolean'
+      ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
+      : type === 'string'
+      ? 'bg-linkflow-primary-soft text-linkflow-primary dark:bg-linkflow-dark-primary-soft dark:text-linkflow-dark-primary'
+      : 'bg-slate-100 text-linkflow-muted dark:bg-slate-800 dark:text-linkflow-dark-muted',
+  ].join(' ');
+};
+
 interface DevicePropertyCardProps {
   name: string;
   value: unknown;
@@ -72,23 +85,50 @@ interface DevicePropertyCardProps {
 
 const DevicePropertyCard = ({ name, value }: DevicePropertyCardProps) => {
   const { t } = useI18n();
+  const valueType = valueTypeOf(value);
+  const formattedValue = formatPropertyValue(value);
+  const structuredValue = isStructuredPropertyValue(value);
 
   return (
-    <article className="min-h-36 rounded-lg border border-linkflow-border bg-white p-4 shadow-[0_8px_24px_rgba(23,32,51,0.06)] dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:shadow-black/20">
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="m-0 text-xs font-bold uppercase text-linkflow-subtle dark:text-linkflow-dark-subtle">
-            {t('adminDevicePropertyKey')}
-          </p>
-          <h4 className="m-0 mt-1 break-all text-base font-bold">{name}</h4>
+    <article className="group grid min-h-44 overflow-hidden rounded-lg border border-linkflow-border bg-white shadow-[0_8px_24px_rgba(23,32,51,0.06)] transition hover:-translate-y-0.5 hover:border-linkflow-primary hover:shadow-[0_12px_30px_rgba(18,137,153,0.12)] dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:shadow-black/20 dark:hover:border-linkflow-dark-primary">
+      <div className="h-1 bg-linkflow-primary dark:bg-linkflow-dark-primary" />
+      <div className="grid gap-4 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="m-0 text-xs font-bold uppercase text-linkflow-subtle dark:text-linkflow-dark-subtle">
+              {t('adminDevicePropertyKey')}
+            </p>
+            <h4 className="m-0 mt-1 break-all text-base font-black text-linkflow-text dark:text-linkflow-dark-text">
+              {name}
+            </h4>
+          </div>
+          <span className={valueTypeBadgeClassName(valueType)}>
+            {valueType}
+          </span>
         </div>
-        <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-linkflow-muted dark:bg-slate-800 dark:text-linkflow-dark-muted">
-          {valueTypeOf(value)}
-        </span>
+
+        <div className="rounded-lg border border-linkflow-border bg-slate-50/80 p-3 dark:border-linkflow-dark-border dark:bg-slate-950/30">
+          <p className="m-0 mb-2 text-xs font-bold uppercase text-linkflow-subtle dark:text-linkflow-dark-subtle">
+            {t('adminDevicePropertyValue')}
+          </p>
+          {structuredValue ? (
+            <pre className="m-0 max-h-44 overflow-auto whitespace-pre-wrap break-words rounded-md bg-linkflow-code p-3 font-mono text-xs font-semibold leading-5 text-linkflow-code-text">
+              {formattedValue}
+            </pre>
+          ) : (
+            <p className="m-0 break-words text-xl font-black leading-8 text-linkflow-text dark:text-linkflow-dark-text">
+              {formattedValue}
+            </p>
+          )}
+        </div>
+
+        <dl className="m-0 flex items-center justify-between gap-3 text-xs font-bold text-linkflow-subtle dark:text-linkflow-dark-subtle">
+          <dt>{t('adminDevicePropertyValueType')}</dt>
+          <dd className="m-0 font-mono text-linkflow-muted dark:text-linkflow-dark-muted">
+            {valueType}
+          </dd>
+        </dl>
       </div>
-      <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 text-sm font-semibold leading-6 text-linkflow-text dark:bg-slate-900/60 dark:text-linkflow-dark-text">
-        {formatPropertyValue(value)}
-      </pre>
     </article>
   );
 };
@@ -167,7 +207,7 @@ const LatestPropertiesPanel = ({
         </article>
       </div>
 
-      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))]">
+      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
         {entries.map(([key, value]) => (
           <DevicePropertyCard key={key} name={key} value={value} />
         ))}
@@ -254,6 +294,43 @@ const DevicePropertyManagement = () => {
   const [latest, setLatest] = useState<DeviceLatestProperties | null>(null);
   const [loadingLatest, setLoadingLatest] = useState(false);
 
+  const loadSelectableDevices = async (
+    options: { silent?: boolean; isCancelled?: () => boolean } = {},
+  ) => {
+    if (!tenantId) {
+      setDevices([]);
+      setDeviceId('');
+      return;
+    }
+
+    try {
+      const result = await listDevices({
+        tenant_id: tenantId,
+        product_id: productFilter || undefined,
+        page: 1,
+        page_size: 100,
+      });
+      if (options.isCancelled?.()) {
+        return;
+      }
+      setDevices(result.items);
+      setDeviceId((current) =>
+        current && result.items.some((device) => device.id === current)
+          ? current
+          : result.items[0]?.id || '',
+      );
+    } catch (error) {
+      if (options.isCancelled?.() || options.silent) {
+        return;
+      }
+      notification.error({
+        message: t('adminDeviceLoadFailed'),
+        description: error instanceof Error ? error.message : undefined,
+        placement: 'topRight',
+      });
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -331,66 +408,44 @@ const DevicePropertyManagement = () => {
   useEffect(() => {
     let cancelled = false;
 
-    const run = async () => {
-      if (!tenantId) {
-        setDevices([]);
-        setDeviceId('');
-        return;
-      }
-
-      try {
-        const result = await listDevices({
-          tenant_id: tenantId,
-          product_id: productFilter || undefined,
-          page: 1,
-          page_size: 100,
-        });
-        if (cancelled) {
-          return;
-        }
-        setDevices(result.items);
-        setDeviceId((current) =>
-          current && result.items.some((device) => device.id === current)
-            ? current
-            : result.items[0]?.id || '',
-        );
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        notification.error({
-          message: t('adminDeviceLoadFailed'),
-          description: error instanceof Error ? error.message : undefined,
-          placement: 'topRight',
-        });
-      }
-    };
-
-    run();
+    void loadSelectableDevices({ isCancelled: () => cancelled });
 
     return () => {
       cancelled = true;
     };
   }, [productFilter, tenantId, t]);
 
-  const loadLatestProperties = async (nextDeviceId = deviceId) => {
+  const loadLatestProperties = async (
+    nextDeviceId = deviceId,
+    options: { silent?: boolean; isCancelled?: () => boolean } = {},
+  ) => {
     if (!nextDeviceId) {
       setLatest(null);
       return;
     }
 
-    setLoadingLatest(true);
+    if (!options.silent) {
+      setLoadingLatest(true);
+    }
     try {
       const result = await getDeviceLatestProperties(nextDeviceId);
+      if (options.isCancelled?.()) {
+        return;
+      }
       setLatest(result);
     } catch (error) {
+      if (options.isCancelled?.() || options.silent) {
+        return;
+      }
       notification.error({
         message: t('adminDevicePropertyLatestFailed'),
         description: error instanceof Error ? error.message : undefined,
         placement: 'topRight',
       });
     } finally {
-      setLoadingLatest(false);
+      if (!options.silent) {
+        setLoadingLatest(false);
+      }
     }
   };
 
@@ -433,6 +488,78 @@ const DevicePropertyManagement = () => {
     };
   }, [deviceId, t]);
 
+  const { status: realtimeStatus } = useDevicesRealtime({
+    enabled: Boolean(tenantId),
+    onConnectionChanged: (payload, meta) => {
+      if (meta.tenantId !== tenantId) {
+        return;
+      }
+      setDevices((current) =>
+        current.map((device) =>
+          device.id === payload.device_id
+            ? {
+                ...device,
+                connection_status: payload.status,
+                last_seen_at: meta.occurredAt,
+                updated_at: meta.occurredAt,
+              }
+            : device,
+        ),
+      );
+    },
+    onPropertyChanged: (payload, meta) => {
+      if (meta.tenantId !== tenantId || payload.device_id !== deviceId) {
+        return;
+      }
+
+      setLatest({
+        id: payload.device_id,
+        tenant_id: payload.tenant_id,
+        product_id: payload.product_id,
+        product_key: payload.product_key,
+        device_slug: payload.device_slug,
+        reported: true,
+        properties: payload.properties,
+        occurred_at: meta.occurredAt,
+        received_at: meta.occurredAt,
+      });
+
+      getDeviceLatestProperties(payload.device_id)
+        .then((result) => {
+          setLatest(result);
+        })
+        .catch((error) => {
+          notification.error({
+            message: t('adminDevicePropertyLatestFailed'),
+            description: error instanceof Error ? error.message : undefined,
+            placement: 'topRight',
+          });
+        });
+    },
+  });
+
+  useEffect(() => {
+    if (!tenantId || !isRealtimeFallbackStatus(realtimeStatus)) {
+      return;
+    }
+
+    let active = true;
+    const refresh = () => {
+      const isCancelled = () => !active;
+      void loadSelectableDevices({ silent: true, isCancelled });
+      if (deviceId) {
+        void loadLatestProperties(deviceId, { silent: true, isCancelled });
+      }
+    };
+
+    const timer = window.setInterval(refresh, realtimeFallbackRefreshMs);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [deviceId, productFilter, realtimeStatus, tenantId]);
+
   const handleTenantChange = (nextTenantId: string) => {
     setTenantId(nextTenantId);
     setProductFilter('');
@@ -445,8 +572,6 @@ const DevicePropertyManagement = () => {
     setDeviceId('');
     setLatest(null);
   };
-
-  const selectedDevice = devices.find((device) => device.id === deviceId);
 
   return (
     <section className="grid gap-5">
@@ -502,34 +627,19 @@ const DevicePropertyManagement = () => {
             </select>
           </label>
         </div>
-        <button
-          type="button"
-          className="inline-flex h-11 items-center gap-2 rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft disabled:cursor-not-allowed disabled:opacity-60 dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
-          onClick={() => loadLatestProperties()}
-          disabled={!deviceId || loadingLatest}
-        >
-          <ReloadOutlined aria-hidden="true" />
-          {t('adminDevicePropertyLoadLatest')}
-        </button>
-      </div>
-
-      <section className="rounded-lg border border-linkflow-border bg-white p-4 dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="m-0 text-sm font-bold text-linkflow-subtle dark:text-linkflow-dark-subtle">
-              {selectedDevice?.device_slug ?? '--'}
-            </p>
-            <h3 className="m-0 mt-1 truncate text-xl font-bold">
-              {selectedDevice?.device_name ?? t('adminDevicePropertyNoDevice')}
-            </h3>
-          </div>
-          <span className={statusBadgeClassName(latest?.reported ?? false)}>
-            {latest?.reported
-              ? t('adminDevicePropertyReported')
-              : t('adminDevicePropertyNotReported')}
-          </span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <RealtimeStatusBadge status={realtimeStatus} />
+          <button
+            type="button"
+            className="inline-flex h-11 items-center gap-2 rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft disabled:cursor-not-allowed disabled:opacity-60 dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
+            onClick={() => loadLatestProperties()}
+            disabled={!deviceId || loadingLatest}
+          >
+            <ReloadOutlined aria-hidden="true" />
+            {t('adminDevicePropertyLoadLatest')}
+          </button>
         </div>
-      </section>
+      </div>
 
       <div
         className="flex gap-2 overflow-x-auto border-b border-linkflow-border dark:border-linkflow-dark-border"

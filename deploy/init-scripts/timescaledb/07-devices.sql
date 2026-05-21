@@ -189,6 +189,37 @@ BEGIN
         FROM pg_policies
         WHERE schemaname = current_schema()
           AND tablename = 'devices'
+          AND policyname = 'devices_select_for_admin'
+    ) THEN
+        CREATE POLICY devices_select_for_admin
+            ON devices
+            FOR SELECT
+            USING (current_app_admin_service() IS NOT NULL);
+    END IF;
+
+    -- Admin UPDATE on devices is intended for connection-state writes from
+    -- backend services (e.g. device-event-processor handling client_connected /
+    -- client_disconnected). Column scoping (connection_status, last_seen_at)
+    -- is enforced by the calling code, not by RLS.
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = current_schema()
+          AND tablename = 'devices'
+          AND policyname = 'devices_update_for_admin'
+    ) THEN
+        CREATE POLICY devices_update_for_admin
+            ON devices
+            FOR UPDATE
+            USING (current_app_admin_service() IS NOT NULL)
+            WITH CHECK (current_app_admin_service() IS NOT NULL);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = current_schema()
+          AND tablename = 'devices'
           AND policyname = 'devices_insert_for_tenant_owner'
     ) THEN
         CREATE POLICY devices_insert_for_tenant_owner
@@ -283,6 +314,19 @@ BEGIN
             ON device_credentials
             FOR SELECT
             USING (current_app_internal_service() = 'backend');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = current_schema()
+          AND tablename = 'device_credentials'
+          AND policyname = 'device_credentials_select_for_admin'
+    ) THEN
+        CREATE POLICY device_credentials_select_for_admin
+            ON device_credentials
+            FOR SELECT
+            USING (current_app_admin_service() IS NOT NULL);
     END IF;
 
     IF NOT EXISTS (

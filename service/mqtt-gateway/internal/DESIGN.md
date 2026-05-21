@@ -1,5 +1,13 @@
 # MQTT TOPIC DESIGN
 
+> Status: legacy / disabled.
+>
+> `service/mqtt-gateway` is kept as a historical MQTT adapter prototype, but it
+> is not part of the active runtime path. The current MQTT ingress path is EMQX
+> Rule Engine -> Redpanda `lf.v1.device.events` -> `device-event-processor`.
+> Keep this document as topic-design reference only unless the gateway is
+> explicitly re-enabled.
+
 
 | 类型         | 方向        | Topic                                                                       | Regex                                                                                                                              | Event Type                | 发起方 | 必需性 |
 |--------------|------------|-----------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------|---------------------------|--------|--------|

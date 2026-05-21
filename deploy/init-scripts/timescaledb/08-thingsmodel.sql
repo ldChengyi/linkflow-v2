@@ -124,6 +124,19 @@ BEGIN
         FROM pg_policies
         WHERE schemaname = current_schema()
           AND tablename = 'thingsmodel'
+          AND policyname = 'thingsmodel_select_for_admin'
+    ) THEN
+        CREATE POLICY thingsmodel_select_for_admin
+            ON thingsmodel
+            FOR SELECT
+            USING (current_app_admin_service() IS NOT NULL);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = current_schema()
+          AND tablename = 'thingsmodel'
           AND policyname = 'thingsmodel_insert_for_tenant_owner'
     ) THEN
         CREATE POLICY thingsmodel_insert_for_tenant_owner

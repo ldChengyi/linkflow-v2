@@ -4,5 +4,7 @@ use (
 	./pkg
 	./service/backend
 	./service/device-event-processor
-	./service/mqtt-gateway
+// service/mqtt-gateway is legacy and intentionally disabled.
+// Device MQTT events now enter through EMQX Rule Engine -> Redpanda.
+// ./service/mqtt-gateway
 )

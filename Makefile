@@ -3,15 +3,16 @@
 # Run `make` or `make help` to see available commands.
 
 COMPOSE := docker compose -f deploy/docker-compose.yml
+GO_ENV := env GOCACHE=/tmp/linkflow-go-build
 
 .DEFAULT_GOAL := help
-.PHONY: help up down restart logs ps clean psql redis-cli kafka-topics db-apply-timescale service-test
+.PHONY: help up down restart logs ps clean reset-containers-drop-data reset-containers-keep-data psql redis-cli kafka-topics db-apply-timescale emqx-reinit redpanda-reinit redeploy-app redeploy-web hot-redeploy fullstack-test
 
 help: ## Show this help
 	@echo "LinkFlow v2 commands:"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-28s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 
 # --- Lifecycle ---
@@ -27,6 +28,12 @@ restart: ## Restart all services
 
 clean: ## Stop and remove all data (DESTRUCTIVE - wipes volumes)
 	$(COMPOSE) down -v
+
+reset-containers-drop-data: ## Rebuild containers and discard all data volumes
+	scripts/dev/reset-containers.sh --drop-volumes
+
+reset-containers-keep-data: ## Rebuild containers while keeping existing data volumes
+	scripts/dev/reset-containers.sh --keep-volumes
 
 # --- Inspection ---
 
@@ -50,21 +57,28 @@ kafka-topics: ## List Kafka topics
 db-apply-timescale: ## Apply TimescaleDB SQL files to the existing database
 	scripts/db/apply-timescaledb.sh
 
-service-test: ## Run mqtt-gateway and device-event-processor from the repo root
-	@echo "Starting device-event-processor and mqtt-gateway. Press Ctrl-C to stop both."
-	@set -e; \
-	( cd service/device-event-processor && env GOCACHE=/tmp/linkflow-go-build go run ./cmd ) & \
-	processor_pid=$$!; \
-	( cd service/mqtt-gateway && env GOCACHE=/tmp/linkflow-go-build MQTT_CLIENT_ID=linkflow-mqtt-gateway-service-test MQTT_CLEAN_SESSION=true go run ./cmd ) & \
-	gateway_pid=$$!; \
-	trap 'kill $$processor_pid $$gateway_pid 2>/dev/null || true' INT TERM EXIT; \
-	wait $$processor_pid $$gateway_pid
+emqx-reinit: ## Re-run emqx-init against the running stack (re-upserts auth/ACL/rules, no data loss)
+	$(COMPOSE) up -d --force-recreate emqx-init
+
+redpanda-reinit: ## Re-run redpanda-init to (idempotently) create any new Kafka topics
+	$(COMPOSE) up -d --force-recreate redpanda-init
+
+redeploy-app: ## Rebuild and restart app services only (backend, device-event-processor); keeps infra and data
+	$(COMPOSE) up -d --build --force-recreate backend device-event-processor
+
+redeploy-web: ## Rebuild and restart the web container (multi-stage pnpm build → nginx)
+	$(COMPOSE) up -d --build --force-recreate web
+
+hot-redeploy: db-apply-timescale redeploy-app redeploy-web emqx-reinit redpanda-reinit ## Apply SQL + rebuild app + rebuild web + re-init EMQX + create new Kafka topics, without dropping data
+
+fullstack-test: ## Run web dev server against the compose backend/services (uses .nvmrc via nvm)
+	@echo "Starting web dev server. Backend services run in docker compose. Press Ctrl-C to stop."
+	@bash -c '. "$$HOME/.nvm/nvm.sh" && cd web && nvm use && pnpm dev'
 
 
 .PHONY: go fmt fmt-list fmt-fix vet test ci
 GO_FILES := $(shell find . -name '*.go' -not -path '*/vendor/*')
 GO_MODULES := pkg service/mqtt-gateway service/device-event-processor service/backend
-GO_ENV := env GOCACHE=/tmp/linkflow-go-build
 
 fmt: ## Check Go formatting
 	@test -z "$$(gofmt -l $(GO_FILES))"

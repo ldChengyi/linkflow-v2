@@ -1,0 +1,62 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://linkflow.dev/contracts/events/lf.v1.device.disconnected",
+    "title": "device.disconnected v1",
+    "description": "Emitted when a device session with the ingestion broker terminates, either by client request, by broker, or by keepalive expiry.",
+    "type": "object",
+    "required": [
+        "tenant_id",
+        "product_id",
+        "device_id",
+        "tenant_slug",
+        "product_key",
+        "device_slug",
+        "protocol"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "tenant_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "product_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "device_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "tenant_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "product_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "device_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+        },
+        "protocol": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 32,
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "reason": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Broker-side disconnect reason if available, e.g. keepalive_timeout, normal, kicked."
+        }
+    }
+}

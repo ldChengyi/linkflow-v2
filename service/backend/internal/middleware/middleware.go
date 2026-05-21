@@ -3,6 +3,7 @@ package middleware
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -50,6 +51,30 @@ func Timeout(timeout time.Duration) Middleware {
 		if timeout <= 0 {
 			return next
 		}
-		return http.TimeoutHandler(next, timeout, http.StatusText(http.StatusServiceUnavailable))
+		timeoutHandler := http.TimeoutHandler(next, timeout, http.StatusText(http.StatusServiceUnavailable))
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isWebSocketUpgrade(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			timeoutHandler.ServeHTTP(w, r)
+		})
 	}
+}
+
+func isWebSocketUpgrade(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	return headerContainsToken(r.Header.Get("Connection"), "upgrade") &&
+		headerContainsToken(r.Header.Get("Upgrade"), "websocket")
+}
+
+func headerContainsToken(header string, token string) bool {
+	for _, part := range strings.Split(header, ",") {
+		if strings.EqualFold(strings.TrimSpace(part), token) {
+			return true
+		}
+	}
+	return false
 }

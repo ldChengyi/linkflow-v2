@@ -108,6 +108,19 @@ BEGIN
         FROM pg_policies
         WHERE schemaname = current_schema()
           AND tablename = 'products'
+          AND policyname = 'products_select_for_admin'
+    ) THEN
+        CREATE POLICY products_select_for_admin
+            ON products
+            FOR SELECT
+            USING (current_app_admin_service() IS NOT NULL);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_policies
+        WHERE schemaname = current_schema()
+          AND tablename = 'products'
           AND policyname = 'products_insert_for_tenant_owner'
     ) THEN
         CREATE POLICY products_insert_for_tenant_owner

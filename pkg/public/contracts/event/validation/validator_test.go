@@ -116,8 +116,53 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		payload map[string]any
 	}{
 		{
+			name: "missing tenant_id",
+			payload: map[string]any{
+				"product_id":  "product-1",
+				"device_id":   "device-1",
+				"tenant_slug": "default",
+				"device_slug": "dev-001",
+				"product_key": "esp32",
+				"protocol":    "mqtt",
+				"properties": map[string]any{
+					"temperature": 23.5,
+				},
+			},
+		},
+		{
+			name: "missing product_id",
+			payload: map[string]any{
+				"tenant_id":   "default",
+				"device_id":   "device-1",
+				"tenant_slug": "default",
+				"device_slug": "dev-001",
+				"product_key": "esp32",
+				"protocol":    "mqtt",
+				"properties": map[string]any{
+					"temperature": 23.5,
+				},
+			},
+		},
+		{
+			name: "missing device_id",
+			payload: map[string]any{
+				"tenant_id":   "default",
+				"product_id":  "product-1",
+				"tenant_slug": "default",
+				"device_slug": "dev-001",
+				"product_key": "esp32",
+				"protocol":    "mqtt",
+				"properties": map[string]any{
+					"temperature": 23.5,
+				},
+			},
+		},
+		{
 			name: "missing tenant_slug",
 			payload: map[string]any{
+				"tenant_id":   "default",
+				"product_id":  "product-1",
+				"device_id":   "device-1",
 				"device_slug": "dev-001",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
@@ -129,6 +174,9 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "missing device_slug",
 			payload: map[string]any{
+				"tenant_id":   "default",
+				"product_id":  "product-1",
+				"device_id":   "device-1",
 				"tenant_slug": "default",
 				"product_key": "esp32",
 				"protocol":    "mqtt",
@@ -140,6 +188,9 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "missing properties",
 			payload: map[string]any{
+				"tenant_id":   "default",
+				"product_id":  "product-1",
+				"device_id":   "device-1",
 				"tenant_slug": "default",
 				"device_slug": "dev-001",
 				"product_key": "esp32",
@@ -149,6 +200,9 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "empty properties",
 			payload: map[string]any{
+				"tenant_id":   "default",
+				"product_id":  "product-1",
+				"device_id":   "device-1",
 				"tenant_slug": "default",
 				"device_slug": "dev-001",
 				"product_key": "esp32",
@@ -159,6 +213,9 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "invalid property name",
 			payload: map[string]any{
+				"tenant_id":   "default",
+				"product_id":  "product-1",
+				"device_id":   "device-1",
 				"tenant_slug": "default",
 				"device_slug": "dev-001",
 				"product_key": "esp32",
@@ -171,6 +228,9 @@ func TestValidateEventRejectsInvalidPropertyPayload(t *testing.T) {
 		{
 			name: "unsupported property value type",
 			payload: map[string]any{
+				"tenant_id":   "default",
+				"product_id":  "product-1",
+				"device_id":   "device-1",
 				"tenant_slug": "default",
 				"device_slug": "dev-001",
 				"product_key": "esp32",
@@ -226,6 +286,9 @@ func validPropertyEvent() map[string]any {
 		"producer":      "mqtt-gateway",
 		"tenant_id":     "default",
 		"payload": map[string]any{
+			"tenant_id":   "default",
+			"product_id":  "product-1",
+			"device_id":   "device-1",
 			"tenant_slug": "default",
 			"device_slug": "dev-001",
 			"product_key": "esp32",
@@ -259,6 +322,130 @@ func validPropertySetAcknowledgedEvent() map[string]any {
 				"led": true,
 			},
 		},
+	}
+}
+
+func validDeviceConnectedEvent() map[string]any {
+	return map[string]any{
+		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3dc1",
+		"event_type":    event.DeviceConnected.Type,
+		"event_version": event.DeviceConnected.Version,
+		"occurred_at":   "2026-05-05T10:00:00Z",
+		"producer":      "emqx-rule-engine",
+		"tenant_id":     "default",
+		"payload": map[string]any{
+			"tenant_id":   "default",
+			"product_id":  "product-1",
+			"device_id":   "device-1",
+			"tenant_slug": "default",
+			"product_key": "esp32",
+			"device_slug": "dev-001",
+			"protocol":    "mqtt",
+			"keepalive":   60,
+		},
+	}
+}
+
+func validDeviceConnectionChangedEvent() map[string]any {
+	return map[string]any{
+		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3dd1",
+		"event_type":    event.DeviceConnectionChanged.Type,
+		"event_version": event.DeviceConnectionChanged.Version,
+		"occurred_at":   "2026-05-05T10:00:01Z",
+		"producer":      "device-event-processor",
+		"tenant_id":     "default",
+		"causation_id":  "018f56d3-7cb7-7f1a-9b41-3f3a63fd3dc1",
+		"payload": map[string]any{
+			"tenant_id":   "default",
+			"product_id":  "product-1",
+			"device_id":   "device-1",
+			"tenant_slug": "default",
+			"product_key": "esp32",
+			"device_slug": "dev-001",
+			"status":      "online",
+		},
+	}
+}
+
+func validDevicePropertyChangedEvent() map[string]any {
+	return map[string]any{
+		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3dd2",
+		"event_type":    event.DevicePropertyChanged.Type,
+		"event_version": event.DevicePropertyChanged.Version,
+		"occurred_at":   "2026-05-05T10:00:02Z",
+		"producer":      "device-event-processor",
+		"tenant_id":     "default",
+		"causation_id":  "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db5",
+		"payload": map[string]any{
+			"tenant_id":   "default",
+			"product_id":  "product-1",
+			"device_id":   "device-1",
+			"tenant_slug": "default",
+			"product_key": "esp32",
+			"device_slug": "dev-001",
+			"properties": map[string]any{
+				"temperature": 23.5,
+			},
+		},
+	}
+}
+
+func validDeviceDisconnectedEvent() map[string]any {
+	return map[string]any{
+		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3dc2",
+		"event_type":    event.DeviceDisconnected.Type,
+		"event_version": event.DeviceDisconnected.Version,
+		"occurred_at":   "2026-05-05T10:01:00Z",
+		"producer":      "emqx-rule-engine",
+		"tenant_id":     "default",
+		"payload": map[string]any{
+			"tenant_id":   "default",
+			"product_id":  "product-1",
+			"device_id":   "device-1",
+			"tenant_slug": "default",
+			"product_key": "esp32",
+			"device_slug": "dev-001",
+			"protocol":    "mqtt",
+			"reason":      "keepalive_timeout",
+		},
+	}
+}
+
+func TestValidateEventAcceptsDeviceConnectedAndDisconnected(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	for _, env := range []map[string]any{
+		validDeviceConnectedEvent(),
+		validDeviceDisconnectedEvent(),
+	} {
+		if _, err := registry.ValidateEvent(mustMarshalJSON(t, env)); err != nil {
+			t.Fatalf("ValidateEvent(%q) error = %v", env["event_type"], err)
+		}
+	}
+}
+
+func TestValidateEventAcceptsDeviceStateChangedEvents(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	for _, env := range []map[string]any{
+		validDeviceConnectionChangedEvent(),
+		validDevicePropertyChangedEvent(),
+	} {
+		if _, err := registry.ValidateEvent(mustMarshalJSON(t, env)); err != nil {
+			t.Fatalf("ValidateEvent(%q) error = %v", env["event_type"], err)
+		}
+	}
+}
+
+func TestValidateEventRejectsDeviceConnectedMissingDeviceID(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	env := validDeviceConnectedEvent()
+	payload := env["payload"].(map[string]any)
+	delete(payload, "device_id")
+
+	if _, err := registry.ValidateEvent(mustMarshalJSON(t, env)); err == nil {
+		t.Fatal("ValidateEvent() error = nil, want missing device_id error")
 	}
 }
 

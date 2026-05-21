@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +21,7 @@ import (
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/credential"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/handler"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/middleware"
+	"github.com/ldchengyi/linkflow-v2/service/backend/internal/realtime"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/server"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/service"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/store"
@@ -102,7 +105,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create auth service: %w", err)
 	}
-	authHandler, err := handler.NewAuthHandler(authService, log)
+	authHandler, err := handler.NewAuthHandler(authService, cfg.AuthAccessTokenTTL, log)
 	if err != nil {
 		return fmt.Errorf("create auth handler: %w", err)
 	}
@@ -175,6 +178,30 @@ func run(ctx context.Context, log *slog.Logger) error {
 		return fmt.Errorf("create audit handler: %w", err)
 	}
 
+	registry := realtime.NewRegistry()
+	realtimeHandler, err := handler.NewRealtimeHandler(registry, tokenManager, sessionStore, tenantStore, log)
+	if err != nil {
+		return fmt.Errorf("create realtime handler: %w", err)
+	}
+
+	groupID := cfg.RealtimeGroupID
+	if groupID == "" {
+		suffix, err := randomGroupSuffix()
+		if err != nil {
+			return fmt.Errorf("generate realtime group id: %w", err)
+		}
+		groupID = "linkflow-backend-realtime-" + suffix
+	}
+	consumer, err := realtime.NewConsumer(cfg.KafkaBrokers, groupID, registry, log)
+	if err != nil {
+		return fmt.Errorf("create realtime consumer: %w", err)
+	}
+	defer func() {
+		if err := consumer.Close(); err != nil {
+			log.Warn("close realtime consumer", "err", err)
+		}
+	}()
+
 	httpServer, err := server.New(cfg, log, server.Options{
 		Auth:         authHandler,
 		Tenant:       tenantHandler,
@@ -183,6 +210,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 		Device:       deviceHandler,
 		EMQXAuth:     emqxAuthHandler,
 		AuditLog:     auditHandler,
+		Realtime:     realtimeHandler,
 		Authenticate: middleware.Authenticate(tokenManager, sessionStore),
 		Audit:        middleware.Audit(auditService, log),
 	})
@@ -190,11 +218,19 @@ func run(ctx context.Context, log *slog.Logger) error {
 		return fmt.Errorf("create http server: %w", err)
 	}
 
-	errCh := make(chan error, 1)
+	errCh := make(chan error, 2)
 	go func() {
 		log.Info("backend started", "addr", httpServer.Addr)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
+			return
+		}
+		errCh <- nil
+	}()
+	go func() {
+		log.Info("realtime consumer started", "topic", "lf.v1.device.state", "group_id", groupID)
+		if err := consumer.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			errCh <- fmt.Errorf("realtime consumer: %w", err)
 			return
 		}
 		errCh <- nil
@@ -210,8 +246,16 @@ func run(ctx context.Context, log *slog.Logger) error {
 		return nil
 	case err := <-errCh:
 		if err != nil {
-			return fmt.Errorf("run http server: %w", err)
+			return fmt.Errorf("run backend: %w", err)
 		}
 		return nil
 	}
+}
+
+func randomGroupSuffix() (string, error) {
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf[:]), nil
 }

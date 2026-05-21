@@ -20,6 +20,7 @@ type Options struct {
 	Device       *handler.DeviceHandler
 	EMQXAuth     *handler.EMQXAuthHandler
 	AuditLog     *handler.AuditHandler
+	Realtime     *handler.RealtimeHandler
 	Authenticate middleware.Middleware
 	Audit        middleware.Middleware
 }
@@ -57,6 +58,9 @@ func New(cfg config.Config, log *slog.Logger, opt Options) (*http.Server, error)
 	}
 	if opt.AuditLog != nil {
 		opt.AuditLog.RegisterRoutes(routes, opt.Authenticate)
+	}
+	if opt.Realtime != nil {
+		opt.Realtime.RegisterRoutes(routes)
 	}
 	routes.Log(log)
 

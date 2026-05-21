@@ -1,0 +1,65 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://linkflow.dev/contracts/events/lf.v1.device.connected",
+    "title": "device.connected v1",
+    "description": "Emitted when a device establishes a session with the ingestion broker. The event marks the protocol-level connect; semantic online state is owned by downstream consumers.",
+    "type": "object",
+    "required": [
+        "tenant_id",
+        "product_id",
+        "device_id",
+        "tenant_slug",
+        "product_key",
+        "device_slug",
+        "protocol"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "tenant_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Tenant boundary identifier mirrored from the envelope."
+        },
+        "product_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Stable internal product UUID resolved by EMQX auth."
+        },
+        "device_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Stable internal device UUID resolved by EMQX auth."
+        },
+        "tenant_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "product_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "device_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+        },
+        "protocol": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 32,
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "keepalive": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Protocol-level keepalive interval in seconds reported by the device, when available."
+        }
+    }
+}

@@ -38,6 +38,7 @@ interface AdminDataTableProps<T> {
   emptyDescription: string;
   emptyTitle: string;
   getRowKey: (item: T) => string;
+  getRowClassName?: (item: T) => string;
   items: T[];
   minWidthClassName?: string;
   mobileItems: ReactNode;
@@ -161,6 +162,7 @@ const AdminDataTable = <T,>({
   emptyDescription,
   emptyTitle,
   getRowKey,
+  getRowClassName,
   items,
   minWidthClassName = 'min-w-[880px]',
   mobileItems,
@@ -196,7 +198,10 @@ const AdminDataTable = <T,>({
             {items.map((item, index) => (
               <tr
                 key={getRowKey(item)}
-                className="border-b border-linkflow-border last:border-b-0 dark:border-linkflow-dark-border"
+                className={[
+                  'border-b border-linkflow-border last:border-b-0 dark:border-linkflow-dark-border',
+                  getRowClassName?.(item) ?? '',
+                ].join(' ')}
               >
                 <td className="px-4 py-4 align-middle text-sm font-semibold text-linkflow-subtle dark:text-linkflow-dark-subtle">
                   {rowOffset + index + 1}

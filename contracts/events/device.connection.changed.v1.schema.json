@@ -1,0 +1,63 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://linkflow.dev/contracts/events/lf.v1.device.connection.changed",
+    "title": "device.connection.changed v1",
+    "description": "Emitted by the device-event-processor after a device connection event has been applied to authoritative state. Downstream consumers (real-time UI, alerting) subscribe to this post-validation stream.",
+    "type": "object",
+    "required": [
+        "tenant_id",
+        "product_id",
+        "device_id",
+        "tenant_slug",
+        "product_key",
+        "device_slug",
+        "status"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "tenant_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "product_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "device_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "tenant_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "product_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "device_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+        },
+        "status": {
+            "type": "string",
+            "enum": [
+                "online",
+                "offline"
+            ]
+        },
+        "reason": {
+            "type": "string",
+            "maxLength": 128,
+            "description": "Carried through from the upstream disconnect event when applicable."
+        }
+    }
+}

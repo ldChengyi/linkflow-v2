@@ -23,6 +23,15 @@ type Config struct {
 	PostgresConnMaxLifetime time.Duration
 	PostgresConnMaxIdleTime time.Duration
 
+	RedisAddr         string
+	RedisPassword     string
+	RedisDB           int
+	RedisDialTimeout  time.Duration
+	RedisReadTimeout  time.Duration
+	RedisWriteTimeout time.Duration
+
+	DeviceOnlineTTL time.Duration
+
 	ContractsDir string
 }
 
@@ -72,6 +81,31 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 
+	redisDB, err := getEnvIntAllowZero("REDIS_DB", 0)
+	if err != nil {
+		return Config{}, err
+	}
+
+	redisDialTimeout, err := getEnvDuration("REDIS_DIAL_TIMEOUT", 5*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+
+	redisReadTimeout, err := getEnvDuration("REDIS_READ_TIMEOUT", 3*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+
+	redisWriteTimeout, err := getEnvDuration("REDIS_WRITE_TIMEOUT", 3*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+
+	deviceOnlineTTL, err := getEnvDuration("DEVICE_ONLINE_TTL", 120*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		KafkaBrokers:         kafkaBrokers,
 		KafkaGroupID:         getEnv("KAFKA_GROUP_ID", "device-event-processor"),
@@ -87,6 +121,15 @@ func Load() (Config, error) {
 		PostgresConnMaxLifetime: connMaxLifetime,
 		PostgresConnMaxIdleTime: connMaxIdleTime,
 
+		RedisAddr:         getEnv("REDIS_ADDR", "127.0.0.1:6379"),
+		RedisPassword:     os.Getenv("REDIS_PASSWORD"),
+		RedisDB:           redisDB,
+		RedisDialTimeout:  redisDialTimeout,
+		RedisReadTimeout:  redisReadTimeout,
+		RedisWriteTimeout: redisWriteTimeout,
+
+		DeviceOnlineTTL: deviceOnlineTTL,
+
 		ContractsDir: getEnv("CONTRACTS_DIR", "../../contracts"),
 	}
 
@@ -96,11 +139,31 @@ func Load() (Config, error) {
 	if cfg.KafkaGroupID == "" {
 		return Config{}, fmt.Errorf("KAFKA_GROUP_ID is required")
 	}
+	if cfg.RedisAddr == "" {
+		return Config{}, fmt.Errorf("REDIS_ADDR is required")
+	}
 	if cfg.ContractsDir == "" {
 		return Config{}, fmt.Errorf("CONTRACTS_DIR is required")
 	}
 
 	return cfg, nil
+}
+
+func getEnvIntAllowZero(key string, def int) (int, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def, nil
+	}
+
+	v, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be an integer: %w", key, err)
+	}
+	if v < 0 {
+		return 0, fmt.Errorf("%s must be non-negative", key)
+	}
+
+	return v, nil
 }
 
 func getEnv(key, def string) string {

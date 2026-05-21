@@ -25,8 +25,9 @@ type emqxAuthRequest struct {
 }
 
 type emqxAuthResponse struct {
-	Result      string `json:"result"`
-	IsSuperuser bool   `json:"is_superuser,omitempty"`
+	Result      string            `json:"result"`
+	IsSuperuser bool              `json:"is_superuser,omitempty"`
+	ClientAttrs map[string]string `json:"client_attrs,omitempty"`
 }
 
 func NewEMQXAuthHandler(service *service.MQTTAuthService, serviceUsername string, servicePassword string, log *slog.Logger) (*EMQXAuthHandler, error) {
@@ -65,7 +66,8 @@ func (h *EMQXAuthHandler) authenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := h.service.Authenticate(r.Context(), in); err != nil {
+	result, err := h.service.Authenticate(r.Context(), in)
+	if err != nil {
 		if isMQTTAuthDeny(err) {
 			h.writeDeny(w)
 			return
@@ -75,7 +77,15 @@ func (h *EMQXAuthHandler) authenticate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, emqxAuthResponse{Result: "allow", IsSuperuser: false})
+	writeJSON(w, http.StatusOK, emqxAuthResponse{Result: "allow", IsSuperuser: false, ClientAttrs: map[string]string{
+		"tenant_id":   result.TenantID,
+		"product_id":  result.ProductID,
+		"device_id":   result.DeviceID,
+		"tenant_slug": result.TenantSlug,
+		"product_key": result.ProductKey,
+		"device_slug": result.DeviceSlug,
+	},
+	})
 }
 
 func (h *EMQXAuthHandler) writeDeny(w http.ResponseWriter) {

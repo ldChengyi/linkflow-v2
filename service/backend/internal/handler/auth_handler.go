@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/httperror"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/middleware"
@@ -11,9 +12,15 @@ import (
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/service"
 )
 
+const (
+	realtimeAccessCookieName = "lf_access"
+	realtimeAccessCookiePath = "/api/v1/ws"
+)
+
 type AuthHandler struct {
-	service *service.AuthService
-	log     *slog.Logger
+	service           *service.AuthService
+	accessTokenMaxAge int
+	log               *slog.Logger
 }
 
 type authRegisterRequest struct {
@@ -26,14 +33,21 @@ type authLoginRequest struct {
 	Password string `json:"password"`
 }
 
-func NewAuthHandler(service *service.AuthService, log *slog.Logger) (*AuthHandler, error) {
+func NewAuthHandler(service *service.AuthService, accessTokenTTL time.Duration, log *slog.Logger) (*AuthHandler, error) {
 	if service == nil {
 		return nil, errors.New("auth service is nil")
+	}
+	if accessTokenTTL <= 0 {
+		return nil, errors.New("access token ttl must be positive")
 	}
 	if log == nil {
 		log = slog.Default()
 	}
-	return &AuthHandler{service: service, log: log}, nil
+	return &AuthHandler{
+		service:           service,
+		accessTokenMaxAge: int(accessTokenTTL.Seconds()),
+		log:               log,
+	}, nil
 }
 
 func (h *AuthHandler) RegisterRoutes(mux RouteRegistrar, authenticate func(http.Handler) http.Handler) {
@@ -60,6 +74,7 @@ func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.setRealtimeAccessCookie(w, result.AccessToken)
 	writeJSON(w, http.StatusCreated, response.SuccessData("registered", http.StatusCreated, result))
 }
 
@@ -79,6 +94,7 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.setRealtimeAccessCookie(w, result.AccessToken)
 	writeJSON(w, http.StatusOK, response.SuccessData("ok", http.StatusOK, result))
 }
 
@@ -97,7 +113,27 @@ func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	http.SetCookie(w, &http.Cookie{
+		Name:     realtimeAccessCookieName,
+		Value:    "",
+		Path:     realtimeAccessCookiePath,
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	writeJSON(w, http.StatusOK, response.SuccessData("logged out", http.StatusOK, map[string]bool{"revoked": true}))
+}
+
+func (h *AuthHandler) setRealtimeAccessCookie(w http.ResponseWriter, accessToken string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     realtimeAccessCookieName,
+		Value:    accessToken,
+		Path:     realtimeAccessCookiePath,
+		MaxAge:   h.accessTokenMaxAge,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 func (h *AuthHandler) writeAuthError(w http.ResponseWriter, err error) {

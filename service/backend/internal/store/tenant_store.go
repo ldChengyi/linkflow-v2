@@ -192,6 +192,35 @@ func (s *PostgresTenantStore) DeleteTenant(ctx context.Context, in service.Tenan
 	return nil
 }
 
+func (s *PostgresTenantStore) ListTenantIDsByOwner(ctx context.Context, userID string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	const query = `SELECT id::text FROM tenants WHERE owner_user_id = $1::uuid`
+
+	var ids []string
+	err := s.withTenantUser(ctx, userID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, userID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list tenant ids by owner: %w", err)
+	}
+	return ids, nil
+}
+
 func (s *PostgresTenantStore) withTenantUser(ctx context.Context, userID string, fn func(pgx.Tx) error) error {
 	return s.actor.withActor(ctx, userID, fn)
 }

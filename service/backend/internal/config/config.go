@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -39,6 +40,10 @@ type Config struct {
 
 	MQTTGatewayUsername string
 	MQTTGatewayPassword string
+
+	KafkaBrokers       []string
+	RealtimeGroupID    string
+	RealtimeAccessName string
 }
 
 func Load() (Config, error) {
@@ -139,6 +144,10 @@ func Load() (Config, error) {
 		AuthBCryptCost:        bcryptCost,
 		MQTTGatewayUsername:   getEnv("MQTT_GATEWAY_USERNAME", "linkflow-mqtt-gateway"),
 		MQTTGatewayPassword:   getEnv("MQTT_GATEWAY_PASSWORD", "linkflow-mqtt-gateway-secret"),
+
+		KafkaBrokers:       splitCSV(getEnv("KAFKA_BROKERS", "127.0.0.1:19092")),
+		RealtimeGroupID:    getEnv("REALTIME_GROUP_ID", ""),
+		RealtimeAccessName: getEnv("REALTIME_ACCESS_COOKIE", "lf_access"),
 	}
 
 	if cfg.HTTPAddr == "" {
@@ -174,6 +183,18 @@ func getEnv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func splitCSV(s string) []string {
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getEnvInt(key string, def int) (int, error) {

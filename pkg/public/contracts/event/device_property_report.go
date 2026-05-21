@@ -7,6 +7,9 @@ const (
 )
 
 type PropertyReportedPayload struct {
+	TenantID   string         `json:"tenant_id"`
+	ProductID  string         `json:"product_id"`
+	DeviceID   string         `json:"device_id"`
 	TenantSlug string         `json:"tenant_slug"`
 	DeviceSlug string         `json:"device_slug"`
 	ProductKey string         `json:"product_key"`

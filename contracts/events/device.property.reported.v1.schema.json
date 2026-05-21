@@ -5,6 +5,9 @@
     "description": "Emitted when a device reports property values through any ingestion protocol (MQTT, HTTP, CoAP). The event carries the reported property values and the protocol context. This schema validates only the payload; the full event must also satisfy envelope.schema.json.",
     "type": "object",
     "required": [
+        "tenant_id",
+        "product_id",
+        "device_id",
         "tenant_slug",
         "device_slug",
         "product_key",
@@ -13,6 +16,24 @@
     ],
     "additionalProperties": false,
     "properties": {
+        "tenant_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Tenant boundary identifier mirrored from the envelope. Carried in the payload so consumers can validate without reaching into envelope metadata."
+        },
+        "product_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Stable internal product UUID resolved at the ingestion boundary. Used to look up the product's current thing model without an extra slug-to-id query."
+        },
+        "device_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Stable internal device UUID resolved at the ingestion boundary. Pairs with product_id for downstream tenant-scoped lookups."
+        },
         "tenant_slug": {
             "type": "string",
             "minLength": 1,

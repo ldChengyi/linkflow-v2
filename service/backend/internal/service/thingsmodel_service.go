@@ -120,6 +120,9 @@ func (s *ThingsModelService) Create(ctx context.Context, in ThingsModelCreateInp
 	if !validThingsModelStatus(in.Status) || (in.IsCurrent && in.Status != thingsModelStatusPublished) {
 		return ThingsModel{}, ErrInvalidThingsModelInput
 	}
+	if err := validateThingsModelDefinition(in.Properties, in.Events, in.Services); err != nil {
+		return ThingsModel{}, ErrInvalidThingsModelInput
+	}
 	return s.models.CreateThingsModel(ctx, in)
 }
 
@@ -165,6 +168,9 @@ func (s *ThingsModelService) Update(ctx context.Context, in ThingsModelUpdateInp
 		return ThingsModel{}, ErrInvalidThingsModelInput
 	}
 	if !validThingsModelStatus(in.Status) || (in.IsCurrent && in.Status != thingsModelStatusPublished) {
+		return ThingsModel{}, ErrInvalidThingsModelInput
+	}
+	if err := validateThingsModelDefinition(in.Properties, in.Events, in.Services); err != nil {
 		return ThingsModel{}, ErrInvalidThingsModelInput
 	}
 	return s.models.UpdateThingsModel(ctx, in)
