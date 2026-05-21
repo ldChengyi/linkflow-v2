@@ -1,9 +1,15 @@
 import { useI18n } from '@/contexts/I18nContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useDevicesRealtime } from '@/hooks/useDevicesRealtime';
 import type { AdminMessageKey } from '@/i18n/admin';
 import type { AppLocale } from '@/i18n/auth';
-import { type AdminSectionId, useAdminUiStore } from '@/stores/adminUiStore';
+import { useAdminUiStore, type AdminSectionId } from '@/stores/adminUiStore';
 import { useAuthStore } from '@/stores/authStore';
+import {
+  useEventInboxStore,
+  type EventInboxItem,
+} from '@/stores/eventInboxStore';
+import { formatDateTime } from '@/utils/date';
 import {
   ApartmentOutlined,
   CloseOutlined,
@@ -14,6 +20,7 @@ import {
   GlobalOutlined,
   LineChartOutlined,
   LogoutOutlined,
+  MailOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MoonOutlined,
@@ -21,6 +28,7 @@ import {
   SunOutlined,
 } from '@ant-design/icons';
 import { Link, history, useLocation } from '@umijs/max';
+import { Popover } from 'antd';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import AuditLogManagement from './AuditLogManagement';
@@ -210,6 +218,104 @@ const getNavItemById = (id: AdminSectionId) => {
   return navItems.find((item) => item.id === id) ?? navItems[0];
 };
 
+interface EventInboxButtonProps {
+  items: EventInboxItem[];
+  unreadCount: number;
+  onMarkAllRead: () => void;
+  onMarkRead: (eventID: string) => void;
+}
+
+const EventInboxButton = ({
+  items,
+  unreadCount,
+  onMarkAllRead,
+  onMarkRead,
+}: EventInboxButtonProps) => {
+  const { t } = useI18n();
+
+  const content = (
+    <div className="w-[min(22rem,calc(100vw-2rem))]">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="m-0 text-sm font-black text-linkflow-text dark:text-linkflow-dark-text">
+            {t('adminEventInboxTitle')}
+          </p>
+          <p className="m-0 mt-1 text-xs font-semibold text-linkflow-subtle dark:text-linkflow-dark-subtle">
+            {t('adminEventInboxUnread').replace('{count}', String(unreadCount))}
+          </p>
+        </div>
+        <button
+          type="button"
+          className="h-9 rounded-md border border-linkflow-border bg-white px-3 text-xs font-bold text-linkflow-muted transition hover:border-linkflow-primary hover:text-linkflow-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-muted dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"
+          onClick={onMarkAllRead}
+          disabled={unreadCount === 0}
+        >
+          {t('adminEventInboxMarkAllRead')}
+        </button>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="rounded-lg border border-linkflow-border bg-slate-50 p-4 text-sm font-semibold text-linkflow-subtle dark:border-linkflow-dark-border dark:bg-slate-950/30 dark:text-linkflow-dark-subtle">
+          {t('adminEventInboxEmpty')}
+        </div>
+      ) : (
+        <div className="grid max-h-96 gap-2 overflow-auto pr-1">
+          {items.map((item) => (
+            <button
+              key={item.event_id}
+              type="button"
+              className={[
+                'grid gap-2 rounded-lg border p-3 text-left transition hover:border-linkflow-primary hover:bg-linkflow-primary-soft/40 dark:hover:border-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft/30',
+                item.read
+                  ? 'border-linkflow-border bg-white dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel'
+                  : 'border-linkflow-primary bg-linkflow-primary-soft/60 dark:border-linkflow-dark-primary dark:bg-linkflow-dark-primary-soft/30',
+              ].join(' ')}
+              onClick={() => {
+                onMarkRead(item.event_id);
+                history.push('/admin/tenants/device-properties');
+              }}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <strong className="break-all text-sm text-linkflow-text dark:text-linkflow-dark-text">
+                  {item.event_name}
+                </strong>
+                {!item.read ? (
+                  <span className="rounded-full bg-linkflow-primary px-2 py-0.5 text-[10px] font-black text-white dark:bg-linkflow-dark-primary dark:text-linkflow-dark-page">
+                    {t('adminEventInboxUnreadBadge')}
+                  </span>
+                ) : null}
+              </div>
+              <p className="m-0 break-all text-xs font-semibold text-linkflow-muted dark:text-linkflow-dark-muted">
+                {item.product_key}/{item.device_slug}
+              </p>
+              <p className="m-0 text-xs font-semibold text-linkflow-subtle dark:text-linkflow-dark-subtle">
+                {formatDateTime(item.occurred_at)}
+              </p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <Popover content={content} placement="bottomRight" trigger="hover">
+      <button
+        type="button"
+        className="relative grid h-11 w-11 place-items-center rounded-md border border-linkflow-border bg-white text-linkflow-muted transition hover:border-linkflow-primary hover:text-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-muted dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"
+        aria-label={t('adminEventInboxTitle')}
+      >
+        <MailOutlined aria-hidden="true" />
+        {unreadCount > 0 ? (
+          <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-black leading-none text-white">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        ) : null}
+      </button>
+    </Popover>
+  );
+};
+
 const AdminPage = () => {
   const { locale, setLocale, t } = useI18n();
   const { darkMode, toggleDarkMode } = useTheme();
@@ -224,6 +330,11 @@ const AdminPage = () => {
   const addVisitedTab = useAdminUiStore((state) => state.addVisitedTab);
   const removeVisitedTab = useAdminUiStore((state) => state.removeVisitedTab);
   const clearSession = useAuthStore((state) => state.clearSession);
+  const inboxItems = useEventInboxStore((state) => state.items);
+  const unreadEventCount = useEventInboxStore((state) => state.unreadCount);
+  const pushInboxEvent = useEventInboxStore((state) => state.pushEvent);
+  const markAllInboxRead = useEventInboxStore((state) => state.markAllRead);
+  const markInboxRead = useEventInboxStore((state) => state.markRead);
 
   const activeSectionId = getActiveSectionId(location.pathname);
   const activeContent = sectionContent[activeSectionId];
@@ -231,6 +342,13 @@ const AdminPage = () => {
   useEffect(() => {
     addVisitedTab(activeSectionId);
   }, [activeSectionId, addVisitedTab]);
+
+  useDevicesRealtime({
+    enabled: true,
+    onEventReceived: (payload, meta) => {
+      pushInboxEvent(payload, meta);
+    },
+  });
 
   const handleLogout = () => {
     clearSession();
@@ -397,6 +515,12 @@ const AdminPage = () => {
             </div>
 
             <div className="flex items-center gap-2">
+              <EventInboxButton
+                items={inboxItems}
+                onMarkAllRead={markAllInboxRead}
+                onMarkRead={markInboxRead}
+                unreadCount={unreadEventCount}
+              />
               <button
                 type="button"
                 className="grid h-11 w-11 place-items-center rounded-md border border-linkflow-border bg-white text-linkflow-muted transition hover:border-linkflow-primary hover:text-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-muted dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"

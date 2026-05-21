@@ -38,9 +38,27 @@ export interface DeviceLatestProperties {
   received_at?: string;
 }
 
+export interface DeviceEventEntry {
+  event_id: string;
+  tenant_id: string;
+  product_id: string;
+  product_key: string;
+  device_slug: string;
+  event_name: string;
+  params: Record<string, unknown>;
+  occurred_at: string;
+  received_at: string;
+}
+
 export interface DeviceListParams extends Record<string, unknown> {
   tenant_id: string;
   product_id?: string;
+  page: number;
+  page_size: number;
+}
+
+export interface DeviceEventHistoryParams extends Record<string, unknown> {
+  event_name?: string;
   page: number;
   page_size: number;
 }
@@ -77,6 +95,19 @@ export const getDeviceLatestProperties = (deviceId: string) => {
     `/api/v1/devices/${deviceId}/properties/latest`,
     {
       method: 'GET',
+    },
+  );
+};
+
+export const listDeviceEvents = (
+  deviceId: string,
+  params: DeviceEventHistoryParams,
+) => {
+  return apiRequest<PageResult<DeviceEventEntry>>(
+    `/api/v1/devices/${deviceId}/events`,
+    {
+      method: 'GET',
+      params,
     },
   );
 };

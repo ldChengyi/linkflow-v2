@@ -8,46 +8,54 @@ import (
 const precisionEpsilon = 1e-9
 
 func validatePropertyValue(name string, def PropertyDefinition, value any) error {
+	return validateDefinedValue(name, def, value, ErrInvalidPropertyValue)
+}
+
+func validateEventParamValue(name string, def PropertyDefinition, value any) error {
+	return validateDefinedValue(name, def, value, ErrInvalidEventValue)
+}
+
+func validateDefinedValue(name string, def PropertyDefinition, value any, sentinel error) error {
 	switch def.DataType {
 	case DataTypeInt:
 		n, ok := numberFromAny(value)
 		if !ok {
-			return propertyError(name, "expected integer value")
+			return valueError(sentinel, name, "expected integer value")
 		}
 		if math.Trunc(n) != n {
-			return propertyError(name, fmt.Sprintf("value %v has fractional part for int", value))
+			return valueError(sentinel, name, fmt.Sprintf("value %v has fractional part for int", value))
 		}
-		return validateNumericConstraints(name, def, n)
+		return validateNumericConstraints(name, def, n, sentinel)
 	case DataTypeFloat, DataTypeDouble:
 		n, ok := numberFromAny(value)
 		if !ok {
-			return propertyError(name, "expected numeric value")
+			return valueError(sentinel, name, "expected numeric value")
 		}
-		return validateNumericConstraints(name, def, n)
+		return validateNumericConstraints(name, def, n, sentinel)
 	case DataTypeBool:
 		if _, ok := value.(bool); !ok {
-			return propertyError(name, "expected boolean value")
+			return valueError(sentinel, name, "expected boolean value")
 		}
 		return nil
 	case DataTypeString:
 		if _, ok := value.(string); !ok {
-			return propertyError(name, "expected string value")
+			return valueError(sentinel, name, "expected string value")
 		}
 		return nil
 	default:
-		return propertyError(name, fmt.Sprintf("unsupported data_type %q", def.DataType))
+		return valueError(sentinel, name, fmt.Sprintf("unsupported data_type %q", def.DataType))
 	}
 }
 
-func validateNumericConstraints(name string, def PropertyDefinition, value float64) error {
+func validateNumericConstraints(name string, def PropertyDefinition, value float64, sentinel error) error {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
-		return propertyError(name, "value must be finite number")
+		return valueError(sentinel, name, "value must be finite number")
 	}
 	if def.HasMin && value < def.Min {
-		return propertyError(name, fmt.Sprintf("value %v below min %v", value, def.Min))
+		return valueError(sentinel, name, fmt.Sprintf("value %v below min %v", value, def.Min))
 	}
 	if def.HasMax && value > def.Max {
-		return propertyError(name, fmt.Sprintf("value %v above max %v", value, def.Max))
+		return valueError(sentinel, name, fmt.Sprintf("value %v above max %v", value, def.Max))
 	}
 
 	precision := effectivePrecision(def)
@@ -55,7 +63,7 @@ func validateNumericConstraints(name string, def PropertyDefinition, value float
 
 	scaledValue := math.Round(value * scale)
 	if math.Abs(value*scale-scaledValue) > precisionEpsilon*math.Max(1, math.Abs(value*scale)) {
-		return propertyError(name, fmt.Sprintf("value %v exceeds precision %d", value, precision))
+		return valueError(sentinel, name, fmt.Sprintf("value %v exceeds precision %d", value, precision))
 	}
 
 	if !def.HasStep {
@@ -64,7 +72,7 @@ func validateNumericConstraints(name string, def PropertyDefinition, value float
 
 	scaledStep := math.Round(def.Step * scale)
 	if scaledStep <= 0 {
-		return propertyError(name, fmt.Sprintf("invalid step %v", def.Step))
+		return valueError(sentinel, name, fmt.Sprintf("invalid step %v", def.Step))
 	}
 
 	anchor := 0.0
@@ -74,7 +82,7 @@ func validateNumericConstraints(name string, def PropertyDefinition, value float
 
 	diff := scaledValue - anchor
 	if math.Mod(diff, scaledStep) != 0 {
-		return propertyError(name, fmt.Sprintf("value %v not aligned with step %v", value, def.Step))
+		return valueError(sentinel, name, fmt.Sprintf("value %v not aligned with step %v", value, def.Step))
 	}
 	return nil
 }
@@ -114,6 +122,6 @@ func maxInt(a, b int) int {
 	return b
 }
 
-func propertyError(name string, reason string) error {
-	return fmt.Errorf("%w: %s: %s", ErrInvalidPropertyValue, name, reason)
+func valueError(sentinel error, name string, reason string) error {
+	return fmt.Errorf("%w: %s: %s", sentinel, name, reason)
 }

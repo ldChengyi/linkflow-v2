@@ -1,0 +1,112 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://linkflow.dev/contracts/events/lf.v1.device.service.call.acknowledged",
+    "title": "device.service.call.acknowledged v1",
+    "description": "Emitted when a device acknowledges a cloud-to-device service call through MQTT service/up/{service_name}_reply.",
+    "type": "object",
+    "required": [
+        "tenant_id",
+        "product_id",
+        "device_id",
+        "tenant_slug",
+        "product_key",
+        "device_slug",
+        "protocol",
+        "service_name",
+        "success"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "tenant_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "product_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "device_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "tenant_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "product_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "device_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+        },
+        "protocol": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 32,
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "service_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*$",
+            "description": "Thing-model service identifier from the MQTT topic segment without the _reply suffix."
+        },
+        "success": {
+            "type": "boolean",
+            "description": "Whether the device accepted and completed the service call."
+        },
+        "code": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "message": {
+            "type": "string",
+            "maxLength": 1024
+        },
+        "output": {
+            "type": "object",
+            "description": "Service output parameters returned by the device.",
+            "patternProperties": {
+                "^[a-z][a-z0-9_]*$": {
+                    "oneOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "boolean"
+                        },
+                        {
+                            "type": "string",
+                            "maxLength": 1024
+                        },
+                        {
+                            "type": "object",
+                            "additionalProperties": true
+                        },
+                        {
+                            "type": "array"
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": false
+        },
+        "raw": {
+            "type": "object",
+            "description": "Original protocol payload captured by the MQTT rule.",
+            "additionalProperties": true
+        }
+    }
+}

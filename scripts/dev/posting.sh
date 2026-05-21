@@ -13,6 +13,8 @@ unset https_proxy
 exec env XDG_CONFIG_HOME=/home/ldchengyi/.local/share/xdg-config \
   NO_PROXY=127.0.0.1,localhost,::1 \
   no_proxy=127.0.0.1,localhost,::1 \
+  POSTING_PAGER=/usr/bin/nvim \
+  POSTING_PAGER_JSON=/usr/bin/nvim \
   posting \
   --collection "$repo_root/api/posting/linkflow" \
   --env "$repo_root/api/posting/dev.env"

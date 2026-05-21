@@ -11,6 +11,7 @@ type fakeDeviceStore struct {
 	listed   DeviceListInput
 	got      DeviceGetInput
 	latest   DeviceLatestPropertiesInput
+	events   DeviceEventHistoryInput
 	updated  DeviceUpdateInput
 	deleted  DeviceDeleteInput
 	device   Device
@@ -77,6 +78,22 @@ func (f *fakeDeviceStore) FindDeviceLatestProperties(ctx context.Context, in Dev
 		Reported:   true,
 		Properties: map[string]any{"temperature": 23.5},
 	}, nil
+}
+
+func (f *fakeDeviceStore) ListDeviceEventHistory(ctx context.Context, in DeviceEventHistoryInput) (PageResult[DeviceEventEntry], error) {
+	f.events = in
+	if f.err != nil {
+		return PageResult[DeviceEventEntry]{}, f.err
+	}
+	return NewPageResult([]DeviceEventEntry{{
+		EventID:    "event-1",
+		TenantID:   "tenant-1",
+		ProductID:  "product-1",
+		ProductKey: "esp32",
+		DeviceSlug: "dev-1",
+		EventName:  in.EventName,
+		Params:     map[string]any{"code": "ok"},
+	}}, 1, in.PageInput), nil
 }
 
 func (f *fakeDeviceStore) UpdateDevice(ctx context.Context, in DeviceUpdateInput) (Device, error) {
@@ -336,6 +353,30 @@ func TestDeviceServiceLatestPropertiesPassesNormalizedInput(t *testing.T) {
 	}
 	if !latest.Reported || latest.Properties["temperature"] != 23.5 {
 		t.Fatalf("LatestProperties result = %+v, want reported temperature", latest)
+	}
+}
+
+func TestDeviceServiceEventHistoryNormalizesInputAndPagination(t *testing.T) {
+	store := &fakeDeviceStore{}
+	svc := newTestDeviceService(t, store)
+
+	result, err := svc.EventHistory(context.Background(), DeviceEventHistoryInput{
+		UserID:    " user-1 ",
+		DeviceID:  " device-1 ",
+		EventName: " alarm ",
+		PageInput: PageInput{Page: -1, PageSize: 1000},
+	})
+	if err != nil {
+		t.Fatalf("EventHistory() error = %v", err)
+	}
+	if store.events.UserID != "user-1" || store.events.DeviceID != "device-1" || store.events.EventName != "alarm" {
+		t.Fatalf("EventHistory input = %+v, want normalized user/device/event", store.events)
+	}
+	if store.events.Page != defaultPage || store.events.PageSize != maxPageSize {
+		t.Fatalf("PageInput = %+v, want page %d page_size %d", store.events.PageInput, defaultPage, maxPageSize)
+	}
+	if result.Total != 1 || len(result.Items) != 1 || result.Items[0].Params["code"] != "ok" {
+		t.Fatalf("EventHistory result = %+v, want one event", result)
 	}
 }
 

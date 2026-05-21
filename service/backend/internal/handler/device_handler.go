@@ -49,6 +49,7 @@ func (h *DeviceHandler) RegisterRoutes(mux RouteRegistrar, authenticate func(htt
 	mux.Handle("POST /api/v1/devices", authenticatedBusinessHandler(http.HandlerFunc(h.create), authenticate, audit))
 	mux.Handle("GET /api/v1/devices", authenticate(http.HandlerFunc(h.list)))
 	mux.Handle("GET /api/v1/devices/{device_id}/properties/latest", authenticate(http.HandlerFunc(h.latestProperties)))
+	mux.Handle("GET /api/v1/devices/{device_id}/events", authenticate(http.HandlerFunc(h.eventHistory)))
 	mux.Handle("GET /api/v1/devices/{device_id}", authenticate(http.HandlerFunc(h.get)))
 	mux.Handle("PUT /api/v1/devices/{device_id}", authenticatedBusinessHandler(http.HandlerFunc(h.update), authenticate, audit))
 	mux.Handle("DELETE /api/v1/devices/{device_id}", authenticatedBusinessHandler(http.HandlerFunc(h.delete), authenticate, audit))
@@ -152,6 +153,27 @@ func (h *DeviceHandler) latestProperties(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, response.SuccessData("ok", http.StatusOK, latest))
+}
+
+func (h *DeviceHandler) eventHistory(w http.ResponseWriter, r *http.Request) {
+	principal, ok := middleware.PrincipalFromContext(r.Context())
+	if !ok {
+		writeHTTPError(w, httperror.ErrUnauthorized)
+		return
+	}
+
+	events, err := h.service.EventHistory(r.Context(), service.DeviceEventHistoryInput{
+		UserID:    principal.UserID,
+		DeviceID:  r.PathValue("device_id"),
+		EventName: r.URL.Query().Get("event_name"),
+		PageInput: pageInputFromRequest(r),
+	})
+	if err != nil {
+		h.writeDeviceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response.SuccessData("ok", http.StatusOK, events))
 }
 
 func (h *DeviceHandler) update(w http.ResponseWriter, r *http.Request) {

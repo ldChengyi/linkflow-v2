@@ -25,6 +25,17 @@ export interface DevicePropertyChangedPayload {
   properties: Record<string, unknown>;
 }
 
+export interface DeviceEventReceivedPayload {
+  tenant_id: string;
+  product_id: string;
+  device_id: string;
+  tenant_slug: string;
+  product_key: string;
+  device_slug: string;
+  event_name: string;
+  params: Record<string, unknown>;
+}
+
 interface DeviceEnvelope<T> {
   event_id: string;
   event_type: string;
@@ -51,6 +62,10 @@ export interface UseDevicesRealtimeOptions {
   onPropertyChanged?: (
     payload: DevicePropertyChangedPayload,
     envelope: { occurredAt: string; tenantId: string },
+  ) => void;
+  onEventReceived?: (
+    payload: DeviceEventReceivedPayload,
+    envelope: { eventId: string; occurredAt: string; tenantId: string },
   ) => void;
 }
 
@@ -134,6 +149,7 @@ export const useDevicesRealtime = (
         return;
       }
       const meta = {
+        eventId: envelope.event_id,
         occurredAt: envelope.occurred_at,
         tenantId: envelope.tenant_id,
       };
@@ -148,6 +164,12 @@ export const useDevicesRealtime = (
         case 'device.property.changed':
           handlers.onPropertyChanged?.(
             envelope.payload as DevicePropertyChangedPayload,
+            meta,
+          );
+          return;
+        case 'device.event.received':
+          handlers.onEventReceived?.(
+            envelope.payload as DeviceEventReceivedPayload,
             meta,
           );
           return;

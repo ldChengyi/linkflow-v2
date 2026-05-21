@@ -33,6 +33,15 @@ func newTestValidator(t *testing.T, reader ThingsModelReader) *PropertyReportVal
 	return v
 }
 
+func newTestEventValidator(t *testing.T, reader ThingsModelReader) *EventReportValidator {
+	t.Helper()
+	v, err := NewEventReportValidator(reader, DefaultCacheTTL)
+	if err != nil {
+		t.Fatalf("NewEventReportValidator() error = %v", err)
+	}
+	return v
+}
+
 func sampleDefinition() ThingsModelDefinition {
 	return ThingsModelDefinition{
 		Properties: map[string]PropertyDefinition{
@@ -40,6 +49,17 @@ func sampleDefinition() ThingsModelDefinition {
 			"battery":     {DataType: DataTypeInt, HasMin: true, Min: 0, HasMax: true, Max: 100},
 			"online":      {DataType: DataTypeBool},
 			"status":      {DataType: DataTypeString},
+		},
+		Events: map[string]EventDefinition{
+			"temperature_alarm": {
+				Output: map[string]PropertyDefinition{
+					"temperature": {DataType: DataTypeFloat, HasMin: true, Min: -40, HasMax: true, Max: 125, HasPrecision: true, Precision: 1},
+					"level":       {DataType: DataTypeString},
+				},
+			},
+			"button_pressed": {
+				Output: map[string]PropertyDefinition{},
+			},
 		},
 	}
 }
@@ -139,8 +159,8 @@ func TestValidateReturnsNotFoundFromReader(t *testing.T) {
 	v := newTestValidator(t, &fakeReader{err: ErrThingsModelNotFound})
 
 	_, err := v.Validate(context.Background(), Input{
-		TenantID:  "tenant-1",
-		ProductID: "product-1",
+		TenantID:   "tenant-1",
+		ProductID:  "product-1",
 		Properties: map[string]any{"temperature": 23.5},
 	})
 	if !errors.Is(err, ErrThingsModelNotFound) {
@@ -161,6 +181,86 @@ func TestValidateReturnsNoAcceptedWhenAllUnknown(t *testing.T) {
 	})
 	if !errors.Is(err, ErrNoAcceptedProperties) {
 		t.Fatalf("err = %v, want ErrNoAcceptedProperties", err)
+	}
+}
+
+func TestValidateEventAcceptsKnownAndDropsUnknownParams(t *testing.T) {
+	reader := &fakeReader{def: sampleDefinition()}
+	v := newTestEventValidator(t, reader)
+
+	result, err := v.Validate(context.Background(), EventInput{
+		TenantID:  "tenant-1",
+		ProductID: "product-1",
+		EventName: "temperature_alarm",
+		Params: map[string]any{
+			"temperature": 85.2,
+			"level":       "warning",
+			"debug_raw":   "ignored",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if len(result.Accepted) != 2 {
+		t.Fatalf("accepted count = %d, want 2", len(result.Accepted))
+	}
+	if _, exists := result.Accepted["debug_raw"]; exists {
+		t.Fatal("debug_raw should not be in accepted")
+	}
+	if len(result.Dropped) != 1 || result.Dropped[0] != "debug_raw" {
+		t.Fatalf("dropped = %v, want [debug_raw]", result.Dropped)
+	}
+}
+
+func TestValidateEventReturnsEventNotFound(t *testing.T) {
+	v := newTestEventValidator(t, &fakeReader{def: sampleDefinition()})
+
+	_, err := v.Validate(context.Background(), EventInput{
+		TenantID:  "tenant-1",
+		ProductID: "product-1",
+		EventName: "unknown_event",
+		Params:    map[string]any{"temperature": 85.2},
+	})
+	if !errors.Is(err, ErrEventNotFound) {
+		t.Fatalf("err = %v, want ErrEventNotFound", err)
+	}
+}
+
+func TestValidateEventRejectsInvalidParamValue(t *testing.T) {
+	v := newTestEventValidator(t, &fakeReader{def: sampleDefinition()})
+
+	_, err := v.Validate(context.Background(), EventInput{
+		TenantID:  "tenant-1",
+		ProductID: "product-1",
+		EventName: "temperature_alarm",
+		Params: map[string]any{
+			"temperature": "hot",
+		},
+	})
+	if !errors.Is(err, ErrInvalidEventValue) {
+		t.Fatalf("err = %v, want ErrInvalidEventValue", err)
+	}
+}
+
+func TestValidateEventAcceptsNoOutputEvent(t *testing.T) {
+	v := newTestEventValidator(t, &fakeReader{def: sampleDefinition()})
+
+	result, err := v.Validate(context.Background(), EventInput{
+		TenantID:  "tenant-1",
+		ProductID: "product-1",
+		EventName: "button_pressed",
+		Params: map[string]any{
+			"ignored": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if len(result.Accepted) != 0 {
+		t.Fatalf("accepted = %v, want empty", result.Accepted)
+	}
+	if len(result.Dropped) != 1 || result.Dropped[0] != "ignored" {
+		t.Fatalf("dropped = %v, want [ignored]", result.Dropped)
 	}
 }
 
@@ -229,7 +329,7 @@ func TestParseDefinitionExtractsSpec(t *testing.T) {
 			"required": false
 		}
 	}`)
-	def, err := ParseDefinition("tenant-1", "product-1", raw)
+	def, err := ParseDefinition("tenant-1", "product-1", raw, []byte(`{}`))
 	if err != nil {
 		t.Fatalf("ParseDefinition() error = %v", err)
 	}

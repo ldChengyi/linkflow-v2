@@ -17,9 +17,12 @@ const (
 )
 
 var (
-	ErrThingsModelNotFound  = errors.New("things model not found")
-	ErrInvalidPropertyValue = errors.New("invalid property value")
-	ErrNoAcceptedProperties = errors.New("no accepted properties remain after filtering")
+	ErrThingsModelNotFound   = errors.New("things model not found")
+	ErrInvalidPropertyValue  = errors.New("invalid property value")
+	ErrNoAcceptedProperties  = errors.New("no accepted properties remain after filtering")
+	ErrEventNotFound         = errors.New("event not found in things model")
+	ErrInvalidEventValue     = errors.New("invalid event value")
+	ErrNoAcceptedEventParams = errors.New("no accepted event params remain after filtering")
 )
 
 type ThingsModelReader interface {
@@ -30,6 +33,11 @@ type ThingsModelDefinition struct {
 	TenantID   string
 	ProductID  string
 	Properties map[string]PropertyDefinition
+	Events     map[string]EventDefinition
+}
+
+type EventDefinition struct {
+	Output map[string]PropertyDefinition
 }
 
 type PropertyDefinition struct {
@@ -45,7 +53,7 @@ type PropertyDefinition struct {
 	Precision    int
 }
 
-func ParseDefinition(tenantID string, productID string, propertiesJSON []byte) (ThingsModelDefinition, error) {
+func ParseDefinition(tenantID string, productID string, propertiesJSON []byte, eventsJSON []byte) (ThingsModelDefinition, error) {
 	var raw map[string]map[string]any
 	if err := json.Unmarshal(propertiesJSON, &raw); err != nil {
 		return ThingsModelDefinition{}, fmt.Errorf("decode thingsmodel properties: %w", err)
@@ -60,11 +68,46 @@ func ParseDefinition(tenantID string, productID string, propertiesJSON []byte) (
 		properties[identifier] = def
 	}
 
+	events, err := parseEventDefinitions(eventsJSON)
+	if err != nil {
+		return ThingsModelDefinition{}, err
+	}
+
 	return ThingsModelDefinition{
 		TenantID:   tenantID,
 		ProductID:  productID,
 		Properties: properties,
+		Events:     events,
 	}, nil
+}
+
+func parseEventDefinitions(rawJSON []byte) (map[string]EventDefinition, error) {
+	if len(rawJSON) == 0 {
+		return map[string]EventDefinition{}, nil
+	}
+	var raw map[string]map[string]any
+	if err := json.Unmarshal(rawJSON, &raw); err != nil {
+		return nil, fmt.Errorf("decode thingsmodel events: %w", err)
+	}
+
+	events := make(map[string]EventDefinition, len(raw))
+	for identifier, body := range raw {
+		outputRaw, _ := body["output"].(map[string]any)
+		output := make(map[string]PropertyDefinition, len(outputRaw))
+		for paramName, paramBody := range outputRaw {
+			paramMap, ok := paramBody.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("event %q output %q must be object", identifier, paramName)
+			}
+			def, err := parsePropertyDefinition(paramMap)
+			if err != nil {
+				return nil, fmt.Errorf("event %q output %q: %w", identifier, paramName, err)
+			}
+			output[paramName] = def
+		}
+		events[identifier] = EventDefinition{Output: output}
+	}
+	return events, nil
 }
 
 func parsePropertyDefinition(body map[string]any) (PropertyDefinition, error) {

@@ -153,9 +153,13 @@ acl_rules=$(cat <<'ACL'
 
 %% 设备只能 publish 自己的上行 topic
 {allow, all, publish, ["lf/v1/${client_attrs.tenant_slug}/${client_attrs.product_key}/${client_attrs.device_slug}/property/up/+"]}.
+{allow, all, publish, ["lf/v1/${client_attrs.tenant_slug}/${client_attrs.product_key}/${client_attrs.device_slug}/event/up/+"]}.
+{allow, all, publish, ["lf/v1/${client_attrs.tenant_slug}/${client_attrs.product_key}/${client_attrs.device_slug}/service/up/+"]}.
 
 %% 设备只能订阅自己的下行 topic
 {allow, all, subscribe, ["lf/v1/${client_attrs.tenant_slug}/${client_attrs.product_key}/${client_attrs.device_slug}/property/down/+"]}.
+{allow, all, subscribe, ["lf/v1/${client_attrs.tenant_slug}/${client_attrs.product_key}/${client_attrs.device_slug}/event/down/+"]}.
+{allow, all, subscribe, ["lf/v1/${client_attrs.tenant_slug}/${client_attrs.product_key}/${client_attrs.device_slug}/service/down/+"]}.
 
 %% 兜底拒绝
 {deny, all}.

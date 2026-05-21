@@ -98,12 +98,32 @@ type DeviceLatestProperties struct {
 	ReceivedAt *time.Time     `json:"received_at,omitempty"`
 }
 
+type DeviceEventHistoryInput struct {
+	UserID    string
+	DeviceID  string
+	EventName string
+	PageInput
+}
+
+type DeviceEventEntry struct {
+	EventID    string         `json:"event_id"`
+	TenantID   string         `json:"tenant_id"`
+	ProductID  string         `json:"product_id"`
+	ProductKey string         `json:"product_key"`
+	DeviceSlug string         `json:"device_slug"`
+	EventName  string         `json:"event_name"`
+	Params     map[string]any `json:"params"`
+	OccurredAt time.Time      `json:"occurred_at"`
+	ReceivedAt time.Time      `json:"received_at"`
+}
+
 type DeviceStore interface {
 	FindDeviceProductAuthType(ctx context.Context, in DeviceProductAuthInput) (string, error)
 	CreateDevice(ctx context.Context, in DeviceCreateInput) (Device, error)
 	ListDevices(ctx context.Context, in DeviceListInput) (PageResult[Device], error)
 	FindDeviceByID(ctx context.Context, in DeviceGetInput) (Device, error)
 	FindDeviceLatestProperties(ctx context.Context, in DeviceLatestPropertiesInput) (DeviceLatestProperties, error)
+	ListDeviceEventHistory(ctx context.Context, in DeviceEventHistoryInput) (PageResult[DeviceEventEntry], error)
 	UpdateDevice(ctx context.Context, in DeviceUpdateInput) (Device, error)
 	DeleteDevice(ctx context.Context, in DeviceDeleteInput) error
 }
@@ -223,6 +243,20 @@ func (s *DeviceService) LatestProperties(ctx context.Context, in DeviceLatestPro
 		return DeviceLatestProperties{}, ErrInvalidDeviceInput
 	}
 	return s.devices.FindDeviceLatestProperties(ctx, in)
+}
+
+func (s *DeviceService) EventHistory(ctx context.Context, in DeviceEventHistoryInput) (PageResult[DeviceEventEntry], error) {
+	if err := ctx.Err(); err != nil {
+		return PageResult[DeviceEventEntry]{}, err
+	}
+	in.UserID = strings.TrimSpace(in.UserID)
+	in.DeviceID = strings.TrimSpace(in.DeviceID)
+	in.EventName = strings.TrimSpace(in.EventName)
+	if in.UserID == "" || in.DeviceID == "" {
+		return PageResult[DeviceEventEntry]{}, ErrInvalidDeviceInput
+	}
+	in.PageInput = NormalizePageInput(in.PageInput)
+	return s.devices.ListDeviceEventHistory(ctx, in)
 }
 
 func (s *DeviceService) Update(ctx context.Context, in DeviceUpdateInput) (Device, error) {

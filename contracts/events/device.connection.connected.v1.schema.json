@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://linkflow.dev/contracts/events/lf.v1.device.connected",
-    "title": "device.connected v1",
+    "$id": "https://linkflow.dev/contracts/events/lf.v1.device.connection.connected",
+    "title": "device.connection.connected v1",
     "description": "Emitted when a device establishes a session with the ingestion broker. The event marks the protocol-level connect; semantic online state is owned by downstream consumers.",
     "type": "object",
     "required": [

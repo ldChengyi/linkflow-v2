@@ -1,10 +1,10 @@
 package event
 
 const (
-	TypeDeviceConnected    = "device.connected"
+	TypeDeviceConnected    = "device.connection.connected"
 	VersionDeviceConnected = 1
 
-	TypeDeviceDisconnected    = "device.disconnected"
+	TypeDeviceDisconnected    = "device.connection.disconnected"
 	VersionDeviceDisconnected = 1
 )
 

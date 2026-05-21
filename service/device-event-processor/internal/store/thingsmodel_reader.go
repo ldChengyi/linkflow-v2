@@ -29,16 +29,17 @@ func (r *ThingsModelReader) FindCurrentByProductID(ctx context.Context, tenantID
 	}
 
 	const query = `
-SELECT properties::text
+SELECT properties::text, events::text
 FROM thingsmodel
 WHERE tenant_id = $1::uuid
   AND product_id = $2::uuid
   AND is_current = true
 LIMIT 1`
 
-	var raw string
+	var propertiesRaw string
+	var eventsRaw string
 	err := r.withAdmin(ctx, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, query, tenantID, productID).Scan(&raw)
+		return tx.QueryRow(ctx, query, tenantID, productID).Scan(&propertiesRaw, &eventsRaw)
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -46,7 +47,7 @@ LIMIT 1`
 		}
 		return validator.ThingsModelDefinition{}, fmt.Errorf("find current thingsmodel by product_id: %w", err)
 	}
-	return validator.ParseDefinition(tenantID, productID, []byte(raw))
+	return validator.ParseDefinition(tenantID, productID, []byte(propertiesRaw), []byte(eventsRaw))
 }
 
 func (r *ThingsModelReader) withAdmin(ctx context.Context, fn func(pgx.Tx) error) error {

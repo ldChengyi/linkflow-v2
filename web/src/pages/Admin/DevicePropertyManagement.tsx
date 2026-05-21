@@ -2,12 +2,15 @@ import { useI18n } from '@/contexts/I18nContext';
 import { useDevicesRealtime } from '@/hooks/useDevicesRealtime';
 import {
   getDeviceLatestProperties,
+  listDeviceEvents,
   listDevices,
   type Device,
+  type DeviceEventEntry,
   type DeviceLatestProperties,
 } from '@/services/devices';
 import { listProducts, type Product } from '@/services/products';
 import { listTenants, type Tenant } from '@/services/tenants';
+import { useEventInboxStore } from '@/stores/eventInboxStore';
 import { formatDateTime } from '@/utils/date';
 import {
   AppstoreOutlined,
@@ -22,7 +25,7 @@ import RealtimeStatusBadge, {
   realtimeFallbackRefreshMs,
 } from './components/RealtimeStatusBadge';
 
-type DevicePropertyTab = 'latest' | 'history';
+type DevicePropertyTab = 'latest' | 'history' | 'events';
 
 const tabButtonClassName = (active: boolean) => {
   return [
@@ -282,6 +285,168 @@ const HistoryPropertiesPanel = () => {
   );
 };
 
+interface DeviceEventsPanelProps {
+  events: DeviceEventEntry[];
+  eventName: string;
+  loading: boolean;
+  page: number;
+  pageSize: number;
+  total: number;
+  onEventNameChange: (eventName: string) => void;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
+  onReload: () => void;
+}
+
+const DeviceEventsPanel = ({
+  events,
+  eventName,
+  loading,
+  page,
+  pageSize,
+  total,
+  onEventNameChange,
+  onPageChange,
+  onPageSizeChange,
+  onReload,
+}: DeviceEventsPanelProps) => {
+  const { t } = useI18n();
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  return (
+    <section className="grid gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-3 rounded-lg border border-linkflow-border bg-white p-4 dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel">
+        <label className="grid min-w-64 gap-2 text-sm font-bold">
+          {t('adminDeviceEventName')}
+          <input
+            className="h-11 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+            value={eventName}
+            onChange={(event) => onEventNameChange(event.target.value)}
+            placeholder={t('adminDeviceEventAllEvents')}
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="grid gap-2 text-sm font-bold">
+            {t('adminDevicePageSize')}
+            <select
+              className="h-11 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+              value={pageSize}
+              onChange={(event) => onPageSizeChange(Number(event.target.value))}
+            >
+              {[10, 20, 50, 100].map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="inline-flex h-11 items-center gap-2 self-end rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft disabled:cursor-not-allowed disabled:opacity-60 dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
+            onClick={onReload}
+            disabled={loading}
+          >
+            <ReloadOutlined aria-hidden="true" />
+            {t('adminDeviceEventLoadHistory')}
+          </button>
+        </div>
+      </div>
+
+      {loading && events.length === 0 ? (
+        <section className="grid min-h-72 place-items-center rounded-lg border border-linkflow-border bg-white p-8 text-center dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel">
+          <p className="m-0 text-sm font-bold text-linkflow-subtle dark:text-linkflow-dark-subtle">
+            {t('adminDeviceEventLoadingHistory')}
+          </p>
+        </section>
+      ) : events.length === 0 ? (
+        <section className="grid min-h-72 place-items-center rounded-lg border border-linkflow-border bg-white p-8 text-center dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel">
+          <p className="m-0 text-base font-bold">
+            {t('adminDeviceEventHistoryEmpty')}
+          </p>
+        </section>
+      ) : (
+        <div className="grid gap-3">
+          {events.map((entry) => (
+            <article
+              key={entry.event_id}
+              className="grid gap-4 rounded-lg border border-linkflow-border bg-white p-4 shadow-[0_8px_24px_rgba(23,32,51,0.06)] dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:shadow-black/20"
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="m-0 text-xs font-bold uppercase text-linkflow-subtle dark:text-linkflow-dark-subtle">
+                    {t('adminDeviceEventName')}
+                  </p>
+                  <h3 className="m-0 mt-1 break-all text-lg font-black text-linkflow-text dark:text-linkflow-dark-text">
+                    {entry.event_name}
+                  </h3>
+                </div>
+                <span className="rounded-full bg-linkflow-primary-soft px-3 py-1 text-xs font-black text-linkflow-primary dark:bg-linkflow-dark-primary-soft dark:text-linkflow-dark-primary">
+                  {entry.product_key}/{entry.device_slug}
+                </span>
+              </div>
+              <dl className="m-0 grid gap-3 text-sm [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+                <div>
+                  <dt className="font-bold text-linkflow-subtle dark:text-linkflow-dark-subtle">
+                    {t('adminDevicePropertyOccurredAt')}
+                  </dt>
+                  <dd className="m-0 mt-1 font-semibold">
+                    {formatDateTime(entry.occurred_at)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-linkflow-subtle dark:text-linkflow-dark-subtle">
+                    {t('adminDevicePropertyReceivedAt')}
+                  </dt>
+                  <dd className="m-0 mt-1 font-semibold">
+                    {formatDateTime(entry.received_at)}
+                  </dd>
+                </div>
+              </dl>
+              <div className="rounded-lg border border-linkflow-border bg-slate-50/80 p-3 dark:border-linkflow-dark-border dark:bg-slate-950/30">
+                <p className="m-0 mb-2 text-xs font-bold uppercase text-linkflow-subtle dark:text-linkflow-dark-subtle">
+                  {t('adminDeviceEventParams')}
+                </p>
+                <pre className="m-0 max-h-52 overflow-auto whitespace-pre-wrap break-words rounded-md bg-linkflow-code p-3 font-mono text-xs font-semibold leading-5 text-linkflow-code-text">
+                  {JSON.stringify(entry.params, null, 2)}
+                </pre>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-linkflow-border bg-white p-3 text-sm font-bold dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel">
+        <span className="text-linkflow-subtle dark:text-linkflow-dark-subtle">
+          {t('adminDeviceEventTotal').replace('{total}', String(total))}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="h-11 rounded-md border border-linkflow-border bg-white px-3 text-sm font-bold transition hover:border-linkflow-primary hover:text-linkflow-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-linkflow-dark-border dark:bg-linkflow-dark-page dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"
+            disabled={loading || page <= 1}
+            onClick={() => onPageChange(page - 1)}
+          >
+            {t('adminDevicePrev')}
+          </button>
+          <span>
+            {t('adminDeviceEventPage')
+              .replace('{page}', String(page))
+              .replace('{totalPages}', String(totalPages))}
+          </span>
+          <button
+            type="button"
+            className="h-11 rounded-md border border-linkflow-border bg-white px-3 text-sm font-bold transition hover:border-linkflow-primary hover:text-linkflow-primary disabled:cursor-not-allowed disabled:opacity-60 dark:border-linkflow-dark-border dark:bg-linkflow-dark-page dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"
+            disabled={loading || page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+          >
+            {t('adminDeviceNext')}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const DevicePropertyManagement = () => {
   const { t } = useI18n();
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -293,6 +458,13 @@ const DevicePropertyManagement = () => {
   const [activeTab, setActiveTab] = useState<DevicePropertyTab>('latest');
   const [latest, setLatest] = useState<DeviceLatestProperties | null>(null);
   const [loadingLatest, setLoadingLatest] = useState(false);
+  const [eventEntries, setEventEntries] = useState<DeviceEventEntry[]>([]);
+  const [eventTotal, setEventTotal] = useState(0);
+  const [eventPage, setEventPage] = useState(1);
+  const [eventPageSize, setEventPageSize] = useState(20);
+  const [eventNameFilter, setEventNameFilter] = useState('');
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const latestInboxEvent = useEventInboxStore((state) => state.items[0]);
 
   const loadSelectableDevices = async (
     options: { silent?: boolean; isCancelled?: () => boolean } = {},
@@ -449,6 +621,54 @@ const DevicePropertyManagement = () => {
     }
   };
 
+  const loadEventHistory = async (
+    nextDeviceId = deviceId,
+    options: {
+      eventName?: string;
+      page?: number;
+      pageSize?: number;
+      silent?: boolean;
+      isCancelled?: () => boolean;
+    } = {},
+  ) => {
+    if (!nextDeviceId) {
+      setEventEntries([]);
+      setEventTotal(0);
+      return;
+    }
+
+    if (!options.silent) {
+      setLoadingEvents(true);
+    }
+    try {
+      const result = await listDeviceEvents(nextDeviceId, {
+        event_name: (options.eventName ?? eventNameFilter).trim() || undefined,
+        page: options.page ?? eventPage,
+        page_size: options.pageSize ?? eventPageSize,
+      });
+      if (options.isCancelled?.()) {
+        return;
+      }
+      setEventEntries(result.items);
+      setEventTotal(result.total);
+      setEventPage(result.page);
+      setEventPageSize(result.page_size);
+    } catch (error) {
+      if (options.isCancelled?.() || options.silent) {
+        return;
+      }
+      notification.error({
+        message: t('adminDeviceEventHistoryFailed'),
+        description: error instanceof Error ? error.message : undefined,
+        placement: 'topRight',
+      });
+    } finally {
+      if (!options.silent) {
+        setLoadingEvents(false);
+      }
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -487,6 +707,102 @@ const DevicePropertyManagement = () => {
       cancelled = true;
     };
   }, [deviceId, t]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const run = async () => {
+      if (activeTab !== 'events') {
+        return;
+      }
+      if (!deviceId) {
+        setEventEntries([]);
+        setEventTotal(0);
+        return;
+      }
+
+      setLoadingEvents(true);
+      try {
+        const result = await listDeviceEvents(deviceId, {
+          event_name: eventNameFilter.trim() || undefined,
+          page: eventPage,
+          page_size: eventPageSize,
+        });
+        if (cancelled) {
+          return;
+        }
+        setEventEntries(result.items);
+        setEventTotal(result.total);
+        setEventPage(result.page);
+        setEventPageSize(result.page_size);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        notification.error({
+          message: t('adminDeviceEventHistoryFailed'),
+          description: error instanceof Error ? error.message : undefined,
+          placement: 'topRight',
+        });
+      } finally {
+        if (!cancelled) {
+          setLoadingEvents(false);
+        }
+      }
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, deviceId, eventNameFilter, eventPage, eventPageSize, t]);
+
+  useEffect(() => {
+    if (
+      !latestInboxEvent ||
+      activeTab !== 'events' ||
+      eventPage !== 1 ||
+      latestInboxEvent.device_id !== deviceId
+    ) {
+      return;
+    }
+
+    const eventName = eventNameFilter.trim();
+    if (eventName && latestInboxEvent.event_name !== eventName) {
+      return;
+    }
+
+    setEventEntries((current) => {
+      if (
+        current.some((entry) => entry.event_id === latestInboxEvent.event_id)
+      ) {
+        return current;
+      }
+
+      const next: DeviceEventEntry = {
+        event_id: latestInboxEvent.event_id,
+        tenant_id: latestInboxEvent.tenant_id,
+        product_id: latestInboxEvent.product_id,
+        product_key: latestInboxEvent.product_key,
+        device_slug: latestInboxEvent.device_slug,
+        event_name: latestInboxEvent.event_name,
+        params: latestInboxEvent.params,
+        occurred_at: latestInboxEvent.occurred_at,
+        received_at: latestInboxEvent.received_at,
+      };
+
+      return [next, ...current].slice(0, eventPageSize);
+    });
+    setEventTotal((current) => current + 1);
+  }, [
+    activeTab,
+    deviceId,
+    eventNameFilter,
+    eventPage,
+    eventPageSize,
+    latestInboxEvent,
+  ]);
 
   const { status: realtimeStatus } = useDevicesRealtime({
     enabled: Boolean(tenantId),
@@ -549,6 +865,9 @@ const DevicePropertyManagement = () => {
       void loadSelectableDevices({ silent: true, isCancelled });
       if (deviceId) {
         void loadLatestProperties(deviceId, { silent: true, isCancelled });
+        if (activeTab === 'events') {
+          void loadEventHistory(deviceId, { silent: true, isCancelled });
+        }
       }
     };
 
@@ -558,19 +877,52 @@ const DevicePropertyManagement = () => {
       active = false;
       window.clearInterval(timer);
     };
-  }, [deviceId, productFilter, realtimeStatus, tenantId]);
+  }, [
+    activeTab,
+    deviceId,
+    eventNameFilter,
+    eventPage,
+    eventPageSize,
+    productFilter,
+    realtimeStatus,
+    tenantId,
+  ]);
 
   const handleTenantChange = (nextTenantId: string) => {
     setTenantId(nextTenantId);
     setProductFilter('');
     setDeviceId('');
     setLatest(null);
+    setEventEntries([]);
+    setEventTotal(0);
+    setEventPage(1);
   };
 
   const handleProductFilterChange = (nextProductId: string) => {
     setProductFilter(nextProductId);
     setDeviceId('');
     setLatest(null);
+    setEventEntries([]);
+    setEventTotal(0);
+    setEventPage(1);
+  };
+
+  const handleDeviceChange = (nextDeviceId: string) => {
+    setDeviceId(nextDeviceId);
+    setLatest(null);
+    setEventEntries([]);
+    setEventTotal(0);
+    setEventPage(1);
+  };
+
+  const handleEventNameChange = (nextEventName: string) => {
+    setEventNameFilter(nextEventName);
+    setEventPage(1);
+  };
+
+  const handleEventPageSizeChange = (nextPageSize: number) => {
+    setEventPageSize(nextPageSize);
+    setEventPage(1);
   };
 
   return (
@@ -613,7 +965,7 @@ const DevicePropertyManagement = () => {
             <select
               className="h-11 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary disabled:opacity-70 dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
               value={deviceId}
-              onChange={(event) => setDeviceId(event.target.value)}
+              onChange={(event) => handleDeviceChange(event.target.value)}
               disabled={devices.length === 0}
             >
               {devices.length === 0 ? (
@@ -666,12 +1018,35 @@ const DevicePropertyManagement = () => {
           <FieldTimeOutlined aria-hidden="true" />
           {t('adminDevicePropertyHistoryTab')}
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'events'}
+          className={tabButtonClassName(activeTab === 'events')}
+          onClick={() => setActiveTab('events')}
+        >
+          <LineChartOutlined aria-hidden="true" />
+          {t('adminDeviceEventTab')}
+        </button>
       </div>
 
       {activeTab === 'latest' ? (
         <LatestPropertiesPanel latest={latest} loading={loadingLatest} />
-      ) : (
+      ) : activeTab === 'history' ? (
         <HistoryPropertiesPanel />
+      ) : (
+        <DeviceEventsPanel
+          events={eventEntries}
+          eventName={eventNameFilter}
+          loading={loadingEvents}
+          onEventNameChange={handleEventNameChange}
+          onPageChange={setEventPage}
+          onPageSizeChange={handleEventPageSizeChange}
+          onReload={() => loadEventHistory()}
+          page={eventPage}
+          pageSize={eventPageSize}
+          total={eventTotal}
+        />
       )}
     </section>
   );

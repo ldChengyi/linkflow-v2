@@ -5,6 +5,9 @@
     "description": "Emitted when a device acknowledges a cloud-to-device property set command. The event records whether the command succeeded and can include the affected properties and the original protocol payload.",
     "type": "object",
     "required": [
+        "tenant_id",
+        "product_id",
+        "device_id",
         "tenant_slug",
         "device_slug",
         "product_key",
@@ -13,6 +16,24 @@
     ],
     "additionalProperties": false,
     "properties": {
+        "tenant_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Tenant boundary identifier mirrored from the envelope."
+        },
+        "product_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Stable internal product UUID resolved by EMQX auth."
+        },
+        "device_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "Stable internal device UUID resolved by EMQX auth."
+        },
         "tenant_slug": {
             "type": "string",
             "minLength": 1,

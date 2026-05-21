@@ -52,6 +52,44 @@ func TestValidateEventAcceptsPropertySetAcknowledged(t *testing.T) {
 	}
 }
 
+func TestValidateEventAcceptsDeviceEventReported(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	env := validDeviceEventReportedEvent()
+	raw := mustMarshalJSON(t, env)
+
+	got, err := registry.ValidateEvent(raw)
+	if err != nil {
+		t.Fatalf("ValidateEvent() error = %v", err)
+	}
+
+	if got.EventType != event.DeviceEventReported.Type {
+		t.Fatalf("EventType = %q", got.EventType)
+	}
+	if got.EventVersion != event.DeviceEventReported.Version {
+		t.Fatalf("EventVersion = %d", got.EventVersion)
+	}
+}
+
+func TestValidateEventAcceptsDeviceServiceCallAcknowledged(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	env := validDeviceServiceCallAcknowledgedEvent()
+	raw := mustMarshalJSON(t, env)
+
+	got, err := registry.ValidateEvent(raw)
+	if err != nil {
+		t.Fatalf("ValidateEvent() error = %v", err)
+	}
+
+	if got.EventType != event.DeviceServiceCallAcknowledged.Type {
+		t.Fatalf("EventType = %q", got.EventType)
+	}
+	if got.EventVersion != event.DeviceServiceCallAcknowledged.Version {
+		t.Fatalf("EventVersion = %d", got.EventVersion)
+	}
+}
+
 func TestValidateEventRejectsInvalidEnvelope(t *testing.T) {
 	registry := newTestRegistry(t)
 
@@ -311,6 +349,9 @@ func validPropertySetAcknowledgedEvent() map[string]any {
 		"producer":      "mqtt-gateway",
 		"tenant_id":     "default",
 		"payload": map[string]any{
+			"tenant_id":   "default",
+			"product_id":  "product-1",
+			"device_id":   "device-1",
 			"tenant_slug": "default",
 			"device_slug": "dev-001",
 			"product_key": "esp32",
@@ -320,6 +361,57 @@ func validPropertySetAcknowledgedEvent() map[string]any {
 			"message":     "applied",
 			"properties": map[string]any{
 				"led": true,
+			},
+		},
+	}
+}
+
+func validDeviceEventReportedEvent() map[string]any {
+	return map[string]any{
+		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db7",
+		"event_type":    event.DeviceEventReported.Type,
+		"event_version": event.DeviceEventReported.Version,
+		"occurred_at":   "2026-05-05T10:00:00Z",
+		"producer":      "emqx-rule-engine",
+		"tenant_id":     "default",
+		"payload": map[string]any{
+			"tenant_id":   "default",
+			"product_id":  "product-1",
+			"device_id":   "device-1",
+			"tenant_slug": "default",
+			"product_key": "esp32",
+			"device_slug": "dev-001",
+			"protocol":    "mqtt",
+			"event_name":  "overheat",
+			"params": map[string]any{
+				"temperature": 85.2,
+			},
+		},
+	}
+}
+
+func validDeviceServiceCallAcknowledgedEvent() map[string]any {
+	return map[string]any{
+		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db8",
+		"event_type":    event.DeviceServiceCallAcknowledged.Type,
+		"event_version": event.DeviceServiceCallAcknowledged.Version,
+		"occurred_at":   "2026-05-05T10:00:00Z",
+		"producer":      "emqx-rule-engine",
+		"tenant_id":     "default",
+		"payload": map[string]any{
+			"tenant_id":    "default",
+			"product_id":   "product-1",
+			"device_id":    "device-1",
+			"tenant_slug":  "default",
+			"product_key":  "esp32",
+			"device_slug":  "dev-001",
+			"protocol":     "mqtt",
+			"service_name": "reboot",
+			"success":      true,
+			"code":         "ok",
+			"message":      "done",
+			"output": map[string]any{
+				"accepted": true,
 			},
 		},
 	}
@@ -390,6 +482,30 @@ func validDevicePropertyChangedEvent() map[string]any {
 	}
 }
 
+func validDeviceEventReceivedEvent() map[string]any {
+	return map[string]any{
+		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3dd3",
+		"event_type":    event.DeviceEventReceived.Type,
+		"event_version": event.DeviceEventReceived.Version,
+		"occurred_at":   "2026-05-05T10:00:03Z",
+		"producer":      "device-event-processor",
+		"tenant_id":     "default",
+		"causation_id":  "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db6",
+		"payload": map[string]any{
+			"tenant_id":   "default",
+			"product_id":  "product-1",
+			"device_id":   "device-1",
+			"tenant_slug": "default",
+			"product_key": "esp32",
+			"device_slug": "dev-001",
+			"event_name":  "temperature_alarm",
+			"params": map[string]any{
+				"temperature": 85.2,
+			},
+		},
+	}
+}
+
 func validDeviceDisconnectedEvent() map[string]any {
 	return map[string]any{
 		"event_id":      "018f56d3-7cb7-7f1a-9b41-3f3a63fd3dc2",
@@ -430,6 +546,7 @@ func TestValidateEventAcceptsDeviceStateChangedEvents(t *testing.T) {
 	for _, env := range []map[string]any{
 		validDeviceConnectionChangedEvent(),
 		validDevicePropertyChangedEvent(),
+		validDeviceEventReceivedEvent(),
 	} {
 		if _, err := registry.ValidateEvent(mustMarshalJSON(t, env)); err != nil {
 			t.Fatalf("ValidateEvent(%q) error = %v", env["event_type"], err)

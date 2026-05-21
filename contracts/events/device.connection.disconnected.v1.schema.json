@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "$id": "https://linkflow.dev/contracts/events/lf.v1.device.disconnected",
-    "title": "device.disconnected v1",
+    "$id": "https://linkflow.dev/contracts/events/lf.v1.device.connection.disconnected",
+    "title": "device.connection.disconnected v1",
     "description": "Emitted when a device session with the ingestion broker terminates, either by client request, by broker, or by keepalive expiry.",
     "type": "object",
     "required": [

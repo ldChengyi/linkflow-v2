@@ -40,6 +40,20 @@ var DeviceDisconnected = Spec{
 	Topic:      TopicDeviceEventsV1,
 }
 
+var DeviceEventReported = Spec{
+	Type:       TypeDeviceEventReported,
+	Version:    VersionDeviceEventReported,
+	SchemaFile: DeviceEventReportedV1SchemaFile,
+	Topic:      TopicDeviceEventsV1,
+}
+
+var DeviceServiceCallAcknowledged = Spec{
+	Type:       TypeDeviceServiceCallAcknowledged,
+	Version:    VersionDeviceServiceCallAcknowledged,
+	SchemaFile: ServiceCallAcknowledgedV1SchemaFile,
+	Topic:      TopicDeviceEventsV1,
+}
+
 var DeviceConnectionChanged = Spec{
 	Type:       TypeDeviceConnectionChanged,
 	Version:    VersionDeviceConnectionChanged,
@@ -54,13 +68,23 @@ var DevicePropertyChanged = Spec{
 	Topic:      TopicDeviceStateV1,
 }
 
+var DeviceEventReceived = Spec{
+	Type:       TypeDeviceEventReceived,
+	Version:    VersionDeviceEventReceived,
+	SchemaFile: DeviceEventReceivedV1SchemaFile,
+	Topic:      TopicDeviceStateV1,
+}
+
 var specs = []Spec{
 	DevicePropertyReported,
 	DevicePropertySetAcknowledged,
 	DeviceConnected,
 	DeviceDisconnected,
+	DeviceEventReported,
+	DeviceServiceCallAcknowledged,
 	DeviceConnectionChanged,
 	DevicePropertyChanged,
+	DeviceEventReceived,
 }
 
 func Specs() []Spec {

@@ -301,6 +301,120 @@ WHERE d.id = $1`
 	return latest, nil
 }
 
+func (s *PostgresDeviceStore) ListDeviceEventHistory(ctx context.Context, in service.DeviceEventHistoryInput) (service.PageResult[service.DeviceEventEntry], error) {
+	if err := ctx.Err(); err != nil {
+		return service.PageResult[service.DeviceEventEntry]{}, err
+	}
+
+	const scopeQuery = `
+SELECT
+    d.tenant_id::text,
+    d.product_id::text,
+    p.product_key,
+    d.device_slug
+FROM devices d
+JOIN products p ON p.id = d.product_id AND p.tenant_id = d.tenant_id
+WHERE d.id = $1`
+
+	const countQuery = `
+SELECT count(*)
+FROM device_event_report_events
+WHERE tenant_id = $1
+  AND product_key = $2
+  AND device_slug = $3
+  AND ($4 = '' OR event_name = $4)`
+
+	const query = `
+SELECT
+    event_id::text,
+    tenant_id,
+    product_key,
+    device_slug,
+    event_name,
+    params,
+    occurred_at,
+    received_at
+FROM device_event_report_events
+WHERE tenant_id = $1
+  AND product_key = $2
+  AND device_slug = $3
+  AND ($4 = '' OR event_name = $4)
+ORDER BY occurred_at DESC, event_id DESC
+LIMIT $5 OFFSET $6`
+
+	var (
+		tenantID   string
+		productID  string
+		productKey string
+		deviceSlug string
+		events     []service.DeviceEventEntry
+		total      int
+	)
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, scopeQuery, in.DeviceID).Scan(
+			&tenantID,
+			&productID,
+			&productKey,
+			&deviceSlug,
+		); err != nil {
+			return err
+		}
+
+		if err := tx.QueryRow(ctx, countQuery, tenantID, productKey, deviceSlug, in.EventName).Scan(&total); err != nil {
+			return err
+		}
+
+		rows, err := tx.Query(
+			ctx,
+			query,
+			tenantID,
+			productKey,
+			deviceSlug,
+			in.EventName,
+			in.PageInput.Limit(),
+			in.PageInput.Offset(),
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var entry service.DeviceEventEntry
+			var params []byte
+			if err := rows.Scan(
+				&entry.EventID,
+				&entry.TenantID,
+				&entry.ProductKey,
+				&entry.DeviceSlug,
+				&entry.EventName,
+				&params,
+				&entry.OccurredAt,
+				&entry.ReceivedAt,
+			); err != nil {
+				return err
+			}
+			entry.ProductID = productID
+			entry.Params = map[string]any{}
+			if len(params) > 0 {
+				if err := json.Unmarshal(params, &entry.Params); err != nil {
+					return fmt.Errorf("unmarshal device event params: %w", err)
+				}
+			}
+			events = append(events, entry)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.PageResult[service.DeviceEventEntry]{}, service.ErrDeviceNotFound
+		}
+		return service.PageResult[service.DeviceEventEntry]{}, fmt.Errorf("list device event history: %w", err)
+	}
+
+	return service.NewPageResult(events, total, in.PageInput), nil
+}
+
 func (s *PostgresDeviceStore) UpdateDevice(ctx context.Context, in service.DeviceUpdateInput) (service.Device, error) {
 	if err := ctx.Err(); err != nil {
 		return service.Device{}, err

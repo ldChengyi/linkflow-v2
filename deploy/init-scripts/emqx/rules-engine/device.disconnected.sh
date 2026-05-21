@@ -1,13 +1,13 @@
-# rule for: device.disconnected
+# rule for: device.connection.disconnected
 # source: $events/client_disconnected
 
 RULE_ID="lf-device-disconnected"
-RULE_NAME="device.disconnected"
+RULE_NAME="device.connection.disconnected"
 
 RULE_SQL=$(cat <<'SQL'
 SELECT
   uuid_v4() as event_id,
-  'device.disconnected' as event_type,
+  'device.connection.disconnected' as event_type,
   1 as event_version,
   format_date('millisecond', '+00:00', '%Y-%m-%dT%H:%M:%S.%3NZ', now_timestamp('millisecond')) as occurred_at,
   'emqx-rule-engine' as producer,
