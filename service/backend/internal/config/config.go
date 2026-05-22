@@ -40,6 +40,10 @@ type Config struct {
 
 	MQTTGatewayUsername string
 	MQTTGatewayPassword string
+	EMQXAPIURL          string
+	EMQXAPIKey          string
+	EMQXAPISecret       string
+	EMQXPublishTimeout  time.Duration
 
 	KafkaBrokers       []string
 	RealtimeGroupID    string
@@ -116,6 +120,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	emqxPublishTimeout, err := getEnvDuration("EMQX_PUBLISH_TIMEOUT", 3*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		HTTPAddr:           getEnv("HTTP_ADDR", ":18080"),
@@ -144,6 +152,10 @@ func Load() (Config, error) {
 		AuthBCryptCost:        bcryptCost,
 		MQTTGatewayUsername:   getEnv("MQTT_GATEWAY_USERNAME", "linkflow-mqtt-gateway"),
 		MQTTGatewayPassword:   getEnv("MQTT_GATEWAY_PASSWORD", "linkflow-mqtt-gateway-secret"),
+		EMQXAPIURL:            getEnv("EMQX_API_URL", "http://127.0.0.1:18083"),
+		EMQXAPIKey:            getEnv("EMQX_API_KEY", "linkflow-init"),
+		EMQXAPISecret:         getEnv("EMQX_API_SECRET", "linkflow-init-secret"),
+		EMQXPublishTimeout:    emqxPublishTimeout,
 
 		KafkaBrokers:       splitCSV(getEnv("KAFKA_BROKERS", "127.0.0.1:19092")),
 		RealtimeGroupID:    getEnv("REALTIME_GROUP_ID", ""),
@@ -173,6 +185,15 @@ func Load() (Config, error) {
 	}
 	if cfg.MQTTGatewayPassword == "" {
 		return Config{}, fmt.Errorf("MQTT_GATEWAY_PASSWORD is required")
+	}
+	if cfg.EMQXAPIURL == "" {
+		return Config{}, fmt.Errorf("EMQX_API_URL is required")
+	}
+	if cfg.EMQXAPIKey == "" {
+		return Config{}, fmt.Errorf("EMQX_API_KEY is required")
+	}
+	if cfg.EMQXAPISecret == "" {
+		return Config{}, fmt.Errorf("EMQX_API_SECRET is required")
 	}
 
 	return cfg, nil

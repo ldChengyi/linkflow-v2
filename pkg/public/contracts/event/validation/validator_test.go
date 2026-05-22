@@ -398,7 +398,9 @@ func validDeviceServiceCallAcknowledgedEvent() map[string]any {
 		"occurred_at":   "2026-05-05T10:00:00Z",
 		"producer":      "emqx-rule-engine",
 		"tenant_id":     "default",
+		"causation_id":  "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db9",
 		"payload": map[string]any{
+			"command_id":   "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db9",
 			"tenant_id":    "default",
 			"product_id":   "product-1",
 			"device_id":    "device-1",

@@ -32,6 +32,10 @@ type deviceUpdateRequest struct {
 	GatewayDeviceID string `json:"gateway_device_id"`
 }
 
+type deviceServiceCallRequest struct {
+	Input map[string]any `json:"input"`
+}
+
 func NewDeviceHandler(service *service.DeviceService, log *slog.Logger) (*DeviceHandler, error) {
 	if service == nil {
 		return nil, errors.New("device service is nil")
@@ -50,7 +54,9 @@ func (h *DeviceHandler) RegisterRoutes(mux RouteRegistrar, authenticate func(htt
 	mux.Handle("GET /api/v1/devices", authenticate(http.HandlerFunc(h.list)))
 	mux.Handle("GET /api/v1/devices/{device_id}/properties/latest", authenticate(http.HandlerFunc(h.latestProperties)))
 	mux.Handle("GET /api/v1/devices/{device_id}/events", authenticate(http.HandlerFunc(h.eventHistory)))
+	mux.Handle("GET /api/v1/devices/{device_id}/services/history", authenticate(http.HandlerFunc(h.serviceCallHistory)))
 	mux.Handle("GET /api/v1/devices/{device_id}", authenticate(http.HandlerFunc(h.get)))
+	mux.Handle("POST /api/v1/devices/{device_id}/services/{service_name}/call", authenticatedBusinessHandler(http.HandlerFunc(h.callService), authenticate, audit))
 	mux.Handle("PUT /api/v1/devices/{device_id}", authenticatedBusinessHandler(http.HandlerFunc(h.update), authenticate, audit))
 	mux.Handle("DELETE /api/v1/devices/{device_id}", authenticatedBusinessHandler(http.HandlerFunc(h.delete), authenticate, audit))
 }
@@ -176,6 +182,67 @@ func (h *DeviceHandler) eventHistory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response.SuccessData("ok", http.StatusOK, events))
 }
 
+func (h *DeviceHandler) serviceCallHistory(w http.ResponseWriter, r *http.Request) {
+	principal, ok := middleware.PrincipalFromContext(r.Context())
+	if !ok {
+		writeHTTPError(w, httperror.ErrUnauthorized)
+		return
+	}
+
+	calls, err := h.service.ServiceCallHistory(r.Context(), service.DeviceServiceCallHistoryInput{
+		UserID:             principal.UserID,
+		DeviceID:           r.PathValue("device_id"),
+		ServiceName:        r.URL.Query().Get("service_name"),
+		AckDeadlineSeconds: parsePositiveInt(r.URL.Query().Get("ack_deadline_seconds")),
+		PageInput:          pageInputFromRequest(r),
+	})
+	if err != nil {
+		h.writeDeviceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response.SuccessData("ok", http.StatusOK, calls))
+}
+
+func (h *DeviceHandler) callService(w http.ResponseWriter, r *http.Request) {
+	principal, ok := middleware.PrincipalFromContext(r.Context())
+	if !ok {
+		writeHTTPError(w, httperror.ErrUnauthorized)
+		return
+	}
+
+	var req deviceServiceCallRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeHTTPError(w, err)
+		return
+	}
+
+	deviceID := r.PathValue("device_id")
+	serviceName := r.PathValue("service_name")
+	auditRecorder, _ := middleware.AuditFromContext(r.Context())
+	auditRecorder.Set("device.service.call", "device", deviceID, map[string]any{
+		"service_name": serviceName,
+	})
+
+	result, err := h.service.CallService(r.Context(), service.DeviceServiceCallInput{
+		UserID:      principal.UserID,
+		DeviceID:    deviceID,
+		ServiceName: serviceName,
+		Input:       req.Input,
+	})
+	if err != nil {
+		auditRecorder.SetErrorCode(mapDeviceError(err).Code)
+		h.writeDeviceError(w, err)
+		return
+	}
+	auditRecorder.AddMetadata(map[string]any{
+		"command_id": result.CommandID,
+		"topic":      result.Topic,
+	})
+
+	writeJSON(w, http.StatusAccepted, response.SuccessData("service call dispatched", http.StatusAccepted, result))
+}
+
 func (h *DeviceHandler) update(w http.ResponseWriter, r *http.Request) {
 	principal, ok := middleware.PrincipalFromContext(r.Context())
 	if !ok {
@@ -257,6 +324,12 @@ func mapDeviceError(err error) *httperror.Error {
 		return httperror.ErrDeviceAlreadyExists
 	case errors.Is(err, service.ErrDeviceNotFound):
 		return httperror.ErrNotFound
+	case errors.Is(err, service.ErrDeviceServiceNotFound):
+		return httperror.ErrNotFound
+	case errors.Is(err, service.ErrDeviceOffline):
+		return httperror.ErrServiceUnavailable
+	case errors.Is(err, service.ErrDeviceCommandPublisherUnavailable):
+		return httperror.ErrServiceUnavailable
 	default:
 		return httperror.From(err)
 	}

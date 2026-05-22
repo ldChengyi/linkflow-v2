@@ -23,6 +23,8 @@ var (
 	ErrEventNotFound         = errors.New("event not found in things model")
 	ErrInvalidEventValue     = errors.New("invalid event value")
 	ErrNoAcceptedEventParams = errors.New("no accepted event params remain after filtering")
+	ErrServiceNotFound       = errors.New("service not found in things model")
+	ErrInvalidServiceOutput  = errors.New("invalid service output value")
 )
 
 type ThingsModelReader interface {
@@ -34,9 +36,14 @@ type ThingsModelDefinition struct {
 	ProductID  string
 	Properties map[string]PropertyDefinition
 	Events     map[string]EventDefinition
+	Services   map[string]ServiceDefinition
 }
 
 type EventDefinition struct {
+	Output map[string]PropertyDefinition
+}
+
+type ServiceDefinition struct {
 	Output map[string]PropertyDefinition
 }
 
@@ -53,7 +60,7 @@ type PropertyDefinition struct {
 	Precision    int
 }
 
-func ParseDefinition(tenantID string, productID string, propertiesJSON []byte, eventsJSON []byte) (ThingsModelDefinition, error) {
+func ParseDefinition(tenantID string, productID string, propertiesJSON []byte, eventsJSON []byte, servicesJSON ...[]byte) (ThingsModelDefinition, error) {
 	var raw map[string]map[string]any
 	if err := json.Unmarshal(propertiesJSON, &raw); err != nil {
 		return ThingsModelDefinition{}, fmt.Errorf("decode thingsmodel properties: %w", err)
@@ -73,11 +80,21 @@ func ParseDefinition(tenantID string, productID string, propertiesJSON []byte, e
 		return ThingsModelDefinition{}, err
 	}
 
+	var servicesRaw []byte
+	if len(servicesJSON) > 0 {
+		servicesRaw = servicesJSON[0]
+	}
+	services, err := parseServiceDefinitions(servicesRaw)
+	if err != nil {
+		return ThingsModelDefinition{}, err
+	}
+
 	return ThingsModelDefinition{
 		TenantID:   tenantID,
 		ProductID:  productID,
 		Properties: properties,
 		Events:     events,
+		Services:   services,
 	}, nil
 }
 
@@ -108,6 +125,35 @@ func parseEventDefinitions(rawJSON []byte) (map[string]EventDefinition, error) {
 		events[identifier] = EventDefinition{Output: output}
 	}
 	return events, nil
+}
+
+func parseServiceDefinitions(rawJSON []byte) (map[string]ServiceDefinition, error) {
+	if len(rawJSON) == 0 {
+		return map[string]ServiceDefinition{}, nil
+	}
+	var raw map[string]map[string]any
+	if err := json.Unmarshal(rawJSON, &raw); err != nil {
+		return nil, fmt.Errorf("decode thingsmodel services: %w", err)
+	}
+
+	services := make(map[string]ServiceDefinition, len(raw))
+	for identifier, body := range raw {
+		outputRaw, _ := body["output"].(map[string]any)
+		output := make(map[string]PropertyDefinition, len(outputRaw))
+		for paramName, paramBody := range outputRaw {
+			paramMap, ok := paramBody.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("service %q output %q must be object", identifier, paramName)
+			}
+			def, err := parsePropertyDefinition(paramMap)
+			if err != nil {
+				return nil, fmt.Errorf("service %q output %q: %w", identifier, paramName, err)
+			}
+			output[paramName] = def
+		}
+		services[identifier] = ServiceDefinition{Output: output}
+	}
+	return services, nil
 }
 
 func parsePropertyDefinition(body map[string]any) (PropertyDefinition, error) {

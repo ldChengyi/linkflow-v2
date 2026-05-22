@@ -415,6 +415,285 @@ LIMIT $5 OFFSET $6`
 	return service.NewPageResult(events, total, in.PageInput), nil
 }
 
+func (s *PostgresDeviceStore) ListDeviceServiceCallHistory(ctx context.Context, in service.DeviceServiceCallHistoryInput) (service.PageResult[service.DeviceServiceCallHistoryEntry], error) {
+	if err := ctx.Err(); err != nil {
+		return service.PageResult[service.DeviceServiceCallHistoryEntry]{}, err
+	}
+
+	const scopeQuery = `
+SELECT
+    d.tenant_id::text,
+    d.product_id::text,
+    p.product_key,
+    d.device_slug
+FROM devices d
+JOIN products p ON p.id = d.product_id AND p.tenant_id = d.tenant_id
+WHERE d.id = $1`
+
+	const countQuery = `
+SELECT count(*)
+FROM device_service_call_events
+WHERE tenant_id = $1
+  AND product_key = $2
+  AND device_slug = $3
+  AND ($4 = '' OR service_name = $4)`
+
+	const query = `
+SELECT
+    c.command_id::text,
+    c.tenant_id,
+    c.product_key,
+    c.device_slug,
+    c.service_name,
+    c.topic,
+    c.input,
+    c.occurred_at,
+    c.occurred_at + make_interval(secs => $5::int),
+    CASE
+      WHEN a.event_id IS NULL AND now() <= c.occurred_at + make_interval(secs => $5::int) THEN 'pending'
+      WHEN a.event_id IS NULL THEN 'failed'
+      WHEN a.success THEN 'success'
+      ELSE 'failed'
+    END,
+    COALESCE(a.event_id::text, ''),
+    a.success,
+    COALESCE(a.code, ''),
+    COALESCE(a.message, ''),
+    COALESCE(a.output, '{}'::jsonb),
+    a.occurred_at,
+    a.received_at
+FROM device_service_call_events c
+LEFT JOIN LATERAL (
+    SELECT event_id, success, code, message, output, occurred_at, received_at
+    FROM device_service_call_ack_events
+    WHERE command_id = c.command_id
+    ORDER BY occurred_at DESC, event_id DESC
+    LIMIT 1
+) a ON true
+WHERE c.tenant_id = $1
+  AND c.product_key = $2
+  AND c.device_slug = $3
+  AND ($4 = '' OR c.service_name = $4)
+ORDER BY c.occurred_at DESC, c.command_id DESC
+LIMIT $6 OFFSET $7`
+
+	var (
+		tenantID   string
+		productID  string
+		productKey string
+		deviceSlug string
+		calls      []service.DeviceServiceCallHistoryEntry
+		total      int
+	)
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, scopeQuery, in.DeviceID).Scan(
+			&tenantID,
+			&productID,
+			&productKey,
+			&deviceSlug,
+		); err != nil {
+			return err
+		}
+
+		if err := tx.QueryRow(ctx, countQuery, tenantID, productKey, deviceSlug, in.ServiceName).Scan(&total); err != nil {
+			return err
+		}
+
+		rows, err := tx.Query(
+			ctx,
+			query,
+			tenantID,
+			productKey,
+			deviceSlug,
+			in.ServiceName,
+			in.AckDeadlineSeconds,
+			in.PageInput.Limit(),
+			in.PageInput.Offset(),
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var entry service.DeviceServiceCallHistoryEntry
+			var input []byte
+			var ackOutput []byte
+			var ackSuccess sql.NullBool
+			var ackOccurredAt sql.NullTime
+			var ackReceivedAt sql.NullTime
+			if err := rows.Scan(
+				&entry.CommandID,
+				&entry.TenantID,
+				&entry.ProductKey,
+				&entry.DeviceSlug,
+				&entry.ServiceName,
+				&entry.Topic,
+				&input,
+				&entry.OccurredAt,
+				&entry.AckDeadlineAt,
+				&entry.AckStatus,
+				&entry.AckEventID,
+				&ackSuccess,
+				&entry.AckCode,
+				&entry.AckMessage,
+				&ackOutput,
+				&ackOccurredAt,
+				&ackReceivedAt,
+			); err != nil {
+				return err
+			}
+			entry.ProductID = productID
+			entry.AckDeadlineSeconds = in.AckDeadlineSeconds
+			entry.Input = map[string]any{}
+			if len(input) > 0 {
+				if err := json.Unmarshal(input, &entry.Input); err != nil {
+					return fmt.Errorf("unmarshal device service call input: %w", err)
+				}
+			}
+			entry.AckOutput = map[string]any{}
+			if len(ackOutput) > 0 {
+				if err := json.Unmarshal(ackOutput, &entry.AckOutput); err != nil {
+					return fmt.Errorf("unmarshal device service call ack output: %w", err)
+				}
+			}
+			if ackSuccess.Valid {
+				success := ackSuccess.Bool
+				entry.AckSuccess = &success
+			}
+			if ackOccurredAt.Valid {
+				t := ackOccurredAt.Time
+				entry.AckOccurredAt = &t
+			}
+			if ackReceivedAt.Valid {
+				t := ackReceivedAt.Time
+				entry.AckReceivedAt = &t
+			}
+			calls = append(calls, entry)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.PageResult[service.DeviceServiceCallHistoryEntry]{}, service.ErrDeviceNotFound
+		}
+		return service.PageResult[service.DeviceServiceCallHistoryEntry]{}, fmt.Errorf("list device service call history: %w", err)
+	}
+
+	return service.NewPageResult(calls, total, in.PageInput), nil
+}
+
+func (s *PostgresDeviceStore) FindDeviceServiceCallTarget(ctx context.Context, in service.DeviceServiceCallTargetInput) (service.DeviceServiceCallTarget, error) {
+	if err := ctx.Err(); err != nil {
+		return service.DeviceServiceCallTarget{}, err
+	}
+
+	const query = `
+	SELECT
+	    t.id::text,
+	    p.id::text,
+	    d.id::text,
+	    t.tenant_slug,
+	    p.product_key,
+	    d.device_slug,
+	    d.status,
+	    d.connection_status,
+	    COALESCE(tm.services, '{}'::jsonb)
+	FROM devices d
+	JOIN tenants t ON t.id = d.tenant_id
+	JOIN products p ON p.id = d.product_id AND p.tenant_id = d.tenant_id
+	LEFT JOIN LATERAL (
+	    SELECT services
+	    FROM thingsmodel
+	    WHERE tenant_id = d.tenant_id
+	      AND product_id = d.product_id
+	      AND is_current = true
+	    LIMIT 1
+	) tm ON true
+	WHERE d.id = $1`
+
+	var target service.DeviceServiceCallTarget
+	var servicesRaw []byte
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, in.DeviceID).Scan(
+			&target.TenantID,
+			&target.ProductID,
+			&target.DeviceID,
+			&target.TenantSlug,
+			&target.ProductKey,
+			&target.DeviceSlug,
+			&target.DeviceStatus,
+			&target.ConnectionStatus,
+			&servicesRaw,
+		)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.DeviceServiceCallTarget{}, service.ErrDeviceNotFound
+		}
+		return service.DeviceServiceCallTarget{}, fmt.Errorf("find device service call target: %w", err)
+	}
+	if err := json.Unmarshal(servicesRaw, &target.Services); err != nil {
+		return service.DeviceServiceCallTarget{}, fmt.Errorf("decode device service call services: %w", err)
+	}
+	if target.Services == nil {
+		target.Services = service.ThingsModelObject{}
+	}
+	return target, nil
+}
+
+func (s *PostgresDeviceStore) SaveDeviceServiceCall(ctx context.Context, in service.DeviceServiceCallRecord) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if in.Input == nil {
+		in.Input = map[string]any{}
+	}
+	input, err := json.Marshal(in.Input)
+	if err != nil {
+		return fmt.Errorf("encode device service call input: %w", err)
+	}
+
+	const query = `
+	INSERT INTO device_service_call_events (
+	    command_id,
+	    tenant_id,
+	    product_key,
+	    device_slug,
+	    service_name,
+	    protocol,
+	    topic,
+	    occurred_at,
+	    producer,
+	    requested_by,
+	    input
+	) VALUES (
+	    $1, $2, $3, $4, $5, $6, $7, $8,
+	    'backend',
+	    $9,
+	    $10::jsonb
+	)
+	ON CONFLICT (command_id, occurred_at) DO NOTHING`
+
+	if _, err := s.actor.pool.Exec(
+		ctx,
+		query,
+		in.CommandID,
+		in.TenantID,
+		in.ProductKey,
+		in.DeviceSlug,
+		in.ServiceName,
+		in.Protocol,
+		in.Topic,
+		in.OccurredAt,
+		in.RequestedBy,
+		input,
+	); err != nil {
+		return fmt.Errorf("insert device service call event: %w", err)
+	}
+	return nil
+}
+
 func (s *PostgresDeviceStore) UpdateDevice(ctx context.Context, in service.DeviceUpdateInput) (service.Device, error) {
 	if err := ctx.Err(); err != nil {
 		return service.Device{}, err

@@ -12,9 +12,12 @@ type fakeDeviceStore struct {
 	got      DeviceGetInput
 	latest   DeviceLatestPropertiesInput
 	events   DeviceEventHistoryInput
+	calls    DeviceServiceCallHistoryInput
 	updated  DeviceUpdateInput
 	deleted  DeviceDeleteInput
 	device   Device
+	target   DeviceServiceCallTarget
+	record   DeviceServiceCallRecord
 	authType string
 	err      error
 }
@@ -96,6 +99,58 @@ func (f *fakeDeviceStore) ListDeviceEventHistory(ctx context.Context, in DeviceE
 	}}, 1, in.PageInput), nil
 }
 
+func (f *fakeDeviceStore) ListDeviceServiceCallHistory(ctx context.Context, in DeviceServiceCallHistoryInput) (PageResult[DeviceServiceCallHistoryEntry], error) {
+	f.calls = in
+	if f.err != nil {
+		return PageResult[DeviceServiceCallHistoryEntry]{}, f.err
+	}
+	return NewPageResult([]DeviceServiceCallHistoryEntry{{
+		CommandID:          "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db9",
+		ServiceName:        "reboot",
+		AckStatus:          "pending",
+		AckDeadlineSeconds: in.AckDeadlineSeconds,
+	}}, 1, in.PageInput), nil
+}
+
+func (f *fakeDeviceStore) FindDeviceServiceCallTarget(ctx context.Context, in DeviceServiceCallTargetInput) (DeviceServiceCallTarget, error) {
+	if f.err != nil {
+		return DeviceServiceCallTarget{}, f.err
+	}
+	if f.target.DeviceID != "" {
+		return f.target, nil
+	}
+	return DeviceServiceCallTarget{
+		TenantID:         "tenant-1",
+		ProductID:        "product-1",
+		DeviceID:         in.DeviceID,
+		TenantSlug:       "default",
+		ProductKey:       "esp32",
+		DeviceSlug:       "dev-1",
+		DeviceStatus:     activeDeviceStatus,
+		ConnectionStatus: "online",
+		Services: ThingsModelObject{
+			"reboot": map[string]any{
+				"name":      "Reboot",
+				"call_type": "async",
+				"input": map[string]any{
+					"delay": map[string]any{
+						"name":      "Delay",
+						"data_type": "int",
+						"required":  true,
+						"spec":      map[string]any{"min": 0, "max": 60},
+					},
+				},
+				"output": map[string]any{},
+			},
+		},
+	}, nil
+}
+
+func (f *fakeDeviceStore) SaveDeviceServiceCall(ctx context.Context, in DeviceServiceCallRecord) error {
+	f.record = in
+	return f.err
+}
+
 func (f *fakeDeviceStore) UpdateDevice(ctx context.Context, in DeviceUpdateInput) (Device, error) {
 	f.updated = in
 	if f.err != nil {
@@ -117,6 +172,16 @@ type fakeDeviceSecretManager struct {
 	secret string
 	hash   string
 	err    error
+}
+
+type fakeDeviceServiceCallPublisher struct {
+	message DeviceServiceCallMessage
+	err     error
+}
+
+func (f *fakeDeviceServiceCallPublisher) PublishServiceCall(ctx context.Context, in DeviceServiceCallMessage) error {
+	f.message = in
+	return f.err
 }
 
 func (f fakeDeviceSecretManager) Generate() (string, error) {
@@ -207,6 +272,106 @@ func TestDeviceServiceCreateNormalizesInputAndDefaults(t *testing.T) {
 	}
 	if store.created.DeviceSecretHash != "hashed-device-secret" {
 		t.Fatalf("DeviceSecretHash = %q, want hashed-device-secret", store.created.DeviceSecretHash)
+	}
+}
+
+func TestDeviceServiceCallServicePublishesValidatedInput(t *testing.T) {
+	store := &fakeDeviceStore{}
+	publisher := &fakeDeviceServiceCallPublisher{}
+	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher), WithDeviceServiceCallRecorder(store))
+
+	result, err := svc.CallService(context.Background(), DeviceServiceCallInput{
+		UserID:      "user-1",
+		DeviceID:    "device-1",
+		ServiceName: "reboot",
+		Input: map[string]any{
+			"delay": float64(5),
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallService() error = %v", err)
+	}
+	if result.CommandID == "" {
+		t.Fatal("CommandID should be generated")
+	}
+	if result.Topic != "lf/v1/default/esp32/dev-1/service/down/reboot" {
+		t.Fatalf("Topic = %q, want service down topic", result.Topic)
+	}
+	if publisher.message.CommandID != result.CommandID {
+		t.Fatalf("published command_id = %q, want %q", publisher.message.CommandID, result.CommandID)
+	}
+	if publisher.message.Input["delay"] != float64(5) {
+		t.Fatalf("published input = %v, want delay", publisher.message.Input)
+	}
+	if store.record.CommandID != result.CommandID {
+		t.Fatalf("stored command_id = %q, want %q", store.record.CommandID, result.CommandID)
+	}
+	if store.record.ServiceName != "reboot" || store.record.Topic != result.Topic {
+		t.Fatalf("stored record = %+v, want service call record", store.record)
+	}
+}
+
+func TestDeviceServiceCallServiceRejectsUnknownService(t *testing.T) {
+	store := &fakeDeviceStore{}
+	publisher := &fakeDeviceServiceCallPublisher{}
+	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher), WithDeviceServiceCallRecorder(store))
+
+	_, err := svc.CallService(context.Background(), DeviceServiceCallInput{
+		UserID:      "user-1",
+		DeviceID:    "device-1",
+		ServiceName: "unknown",
+		Input:       map[string]any{},
+	})
+	if !errors.Is(err, ErrDeviceServiceNotFound) {
+		t.Fatalf("err = %v, want ErrDeviceServiceNotFound", err)
+	}
+	if publisher.message.Topic != "" {
+		t.Fatal("publisher should not be called")
+	}
+}
+
+func TestDeviceServiceCallServiceRejectsMissingRequiredInput(t *testing.T) {
+	store := &fakeDeviceStore{}
+	publisher := &fakeDeviceServiceCallPublisher{}
+	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher), WithDeviceServiceCallRecorder(store))
+
+	_, err := svc.CallService(context.Background(), DeviceServiceCallInput{
+		UserID:      "user-1",
+		DeviceID:    "device-1",
+		ServiceName: "reboot",
+		Input:       map[string]any{},
+	})
+	if !errors.Is(err, ErrInvalidDeviceInput) {
+		t.Fatalf("err = %v, want ErrInvalidDeviceInput", err)
+	}
+	if publisher.message.Topic != "" {
+		t.Fatal("publisher should not be called")
+	}
+}
+
+func TestDeviceServiceCallServiceRejectsOfflineDevice(t *testing.T) {
+	store := &fakeDeviceStore{
+		target: DeviceServiceCallTarget{
+			TenantSlug:       "default",
+			ProductKey:       "esp32",
+			DeviceSlug:       "dev-1",
+			DeviceStatus:     activeDeviceStatus,
+			ConnectionStatus: "offline",
+			Services:         ThingsModelObject{},
+			DeviceID:         "device-1",
+		},
+	}
+	publisher := &fakeDeviceServiceCallPublisher{}
+	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher), WithDeviceServiceCallRecorder(store))
+
+	_, err := svc.CallService(context.Background(), DeviceServiceCallInput{
+		UserID:      "user-1",
+		DeviceID:    "device-1",
+		ServiceName: "reboot",
+		Input:       map[string]any{},
+	})
+	if !errors.Is(err, ErrDeviceOffline) {
+		t.Fatalf("err = %v, want ErrDeviceOffline", err)
 	}
 }
 
@@ -380,6 +545,34 @@ func TestDeviceServiceEventHistoryNormalizesInputAndPagination(t *testing.T) {
 	}
 }
 
+func TestDeviceServiceCallHistoryNormalizesInputDeadlineAndPagination(t *testing.T) {
+	store := &fakeDeviceStore{}
+	svc := newTestDeviceService(t, store)
+
+	result, err := svc.ServiceCallHistory(context.Background(), DeviceServiceCallHistoryInput{
+		UserID:             " user-1 ",
+		DeviceID:           " device-1 ",
+		ServiceName:        " reboot ",
+		AckDeadlineSeconds: 0,
+		PageInput:          PageInput{Page: -1, PageSize: 1000},
+	})
+	if err != nil {
+		t.Fatalf("ServiceCallHistory() error = %v", err)
+	}
+	if store.calls.UserID != "user-1" || store.calls.DeviceID != "device-1" || store.calls.ServiceName != "reboot" {
+		t.Fatalf("ServiceCallHistory input = %+v, want normalized user/device/service", store.calls)
+	}
+	if store.calls.AckDeadlineSeconds != 90 {
+		t.Fatalf("AckDeadlineSeconds = %d, want default 90", store.calls.AckDeadlineSeconds)
+	}
+	if store.calls.Page != defaultPage || store.calls.PageSize != maxPageSize {
+		t.Fatalf("PageInput = %+v, want page %d page_size %d", store.calls.PageInput, defaultPage, maxPageSize)
+	}
+	if result.Total != 1 || len(result.Items) != 1 || result.Items[0].ServiceName != "reboot" {
+		t.Fatalf("ServiceCallHistory result = %+v, want one call", result)
+	}
+}
+
 func TestMQTTAuthServiceAuthenticatesSecretDevice(t *testing.T) {
 	store := &fakeDeviceStore{}
 	svc, err := NewMQTTAuthService(store, fakeDeviceSecretManager{})
@@ -420,10 +613,10 @@ func TestMQTTAuthServiceRejectsInvalidSecret(t *testing.T) {
 	}
 }
 
-func newTestDeviceService(t *testing.T, store DeviceStore) *DeviceService {
+func newTestDeviceService(t *testing.T, store DeviceStore, options ...DeviceServiceOption) *DeviceService {
 	t.Helper()
 
-	svc, err := NewDeviceService(store, fakeDeviceSecretManager{})
+	svc, err := NewDeviceService(store, fakeDeviceSecretManager{}, options...)
 	if err != nil {
 		t.Fatalf("NewDeviceService() error = %v", err)
 	}

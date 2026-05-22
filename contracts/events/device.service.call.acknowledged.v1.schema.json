@@ -5,6 +5,7 @@
     "description": "Emitted when a device acknowledges a cloud-to-device service call through MQTT service/up/{service_name}_reply.",
     "type": "object",
     "required": [
+        "command_id",
         "tenant_id",
         "product_id",
         "device_id",
@@ -17,6 +18,11 @@
     ],
     "additionalProperties": false,
     "properties": {
+        "command_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Cloud-generated command_id from the service call payload. Devices must echo it back so ACK events can be correlated with the original call."
+        },
         "tenant_id": {
             "type": "string",
             "minLength": 1,

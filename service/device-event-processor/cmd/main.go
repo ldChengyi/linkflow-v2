@@ -98,6 +98,10 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create event report store: %w", err)
 	}
+	serviceCallStore, err := store.NewServiceCallStore(pool)
+	if err != nil {
+		return fmt.Errorf("create service call store: %w", err)
+	}
 
 	thingsModelReader, err := store.NewThingsModelReader(pool)
 	if err != nil {
@@ -112,6 +116,10 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create event report validator: %w", err)
 	}
+	serviceCallValidator, err := validator.NewServiceCallValidator(thingsModelReader, validator.DefaultCacheTTL)
+	if err != nil {
+		return fmt.Errorf("create service call validator: %w", err)
+	}
 
 	propertyReportHandler, err := handler.NewPropertyReportHandler(propertyReportStore, propertyValidator, eventPublisher, log)
 	if err != nil {
@@ -121,12 +129,19 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create event report handler: %w", err)
 	}
+	serviceCallHandler, err := handler.NewServiceCallHandler(serviceCallStore, serviceCallValidator, log)
+	if err != nil {
+		return fmt.Errorf("create service call handler: %w", err)
+	}
 
 	if err := eventProcessor.Register(event.DevicePropertyReported, propertyReportHandler); err != nil {
 		return fmt.Errorf("register property reported handler: %w", err)
 	}
 	if err := eventProcessor.Register(event.DeviceEventReported, eventReportHandler); err != nil {
 		return fmt.Errorf("register event reported handler: %w", err)
+	}
+	if err := eventProcessor.Register(event.DeviceServiceCallAcknowledged, serviceCallHandler); err != nil {
+		return fmt.Errorf("register service call acknowledged handler: %w", err)
 	}
 
 	deviceConnectionStore, err := store.NewDeviceConnectionStore(pool, redisClient, cfg.DeviceOnlineTTL)

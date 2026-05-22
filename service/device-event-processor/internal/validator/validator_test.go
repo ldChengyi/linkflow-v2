@@ -42,6 +42,15 @@ func newTestEventValidator(t *testing.T, reader ThingsModelReader) *EventReportV
 	return v
 }
 
+func newTestServiceCallValidator(t *testing.T, reader ThingsModelReader) *ServiceCallValidator {
+	t.Helper()
+	v, err := NewServiceCallValidator(reader, DefaultCacheTTL)
+	if err != nil {
+		t.Fatalf("NewServiceCallValidator() error = %v", err)
+	}
+	return v
+}
+
 func sampleDefinition() ThingsModelDefinition {
 	return ThingsModelDefinition{
 		Properties: map[string]PropertyDefinition{
@@ -58,6 +67,16 @@ func sampleDefinition() ThingsModelDefinition {
 				},
 			},
 			"button_pressed": {
+				Output: map[string]PropertyDefinition{},
+			},
+		},
+		Services: map[string]ServiceDefinition{
+			"reboot": {
+				Output: map[string]PropertyDefinition{
+					"accepted": {DataType: DataTypeBool},
+				},
+			},
+			"sync_time": {
 				Output: map[string]PropertyDefinition{},
 			},
 		},
@@ -250,6 +269,85 @@ func TestValidateEventAcceptsNoOutputEvent(t *testing.T) {
 		ProductID: "product-1",
 		EventName: "button_pressed",
 		Params: map[string]any{
+			"ignored": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if len(result.Accepted) != 0 {
+		t.Fatalf("accepted = %v, want empty", result.Accepted)
+	}
+	if len(result.Dropped) != 1 || result.Dropped[0] != "ignored" {
+		t.Fatalf("dropped = %v, want [ignored]", result.Dropped)
+	}
+}
+
+func TestValidateServiceCallAcceptsKnownAndDropsUnknownOutput(t *testing.T) {
+	reader := &fakeReader{def: sampleDefinition()}
+	v := newTestServiceCallValidator(t, reader)
+
+	result, err := v.Validate(context.Background(), ServiceCallInput{
+		TenantID:    "tenant-1",
+		ProductID:   "product-1",
+		ServiceName: "reboot",
+		Output: map[string]any{
+			"accepted":  true,
+			"debug_raw": "ignored",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if len(result.Accepted) != 1 {
+		t.Fatalf("accepted count = %d, want 1", len(result.Accepted))
+	}
+	if _, exists := result.Accepted["debug_raw"]; exists {
+		t.Fatal("debug_raw should not be in accepted")
+	}
+	if len(result.Dropped) != 1 || result.Dropped[0] != "debug_raw" {
+		t.Fatalf("dropped = %v, want [debug_raw]", result.Dropped)
+	}
+}
+
+func TestValidateServiceCallReturnsServiceNotFound(t *testing.T) {
+	v := newTestServiceCallValidator(t, &fakeReader{def: sampleDefinition()})
+
+	_, err := v.Validate(context.Background(), ServiceCallInput{
+		TenantID:    "tenant-1",
+		ProductID:   "product-1",
+		ServiceName: "unknown_service",
+		Output:      map[string]any{"accepted": true},
+	})
+	if !errors.Is(err, ErrServiceNotFound) {
+		t.Fatalf("err = %v, want ErrServiceNotFound", err)
+	}
+}
+
+func TestValidateServiceCallRejectsInvalidOutputValue(t *testing.T) {
+	v := newTestServiceCallValidator(t, &fakeReader{def: sampleDefinition()})
+
+	_, err := v.Validate(context.Background(), ServiceCallInput{
+		TenantID:    "tenant-1",
+		ProductID:   "product-1",
+		ServiceName: "reboot",
+		Output: map[string]any{
+			"accepted": "yes",
+		},
+	})
+	if !errors.Is(err, ErrInvalidServiceOutput) {
+		t.Fatalf("err = %v, want ErrInvalidServiceOutput", err)
+	}
+}
+
+func TestValidateServiceCallAcceptsNoOutputService(t *testing.T) {
+	v := newTestServiceCallValidator(t, &fakeReader{def: sampleDefinition()})
+
+	result, err := v.Validate(context.Background(), ServiceCallInput{
+		TenantID:    "tenant-1",
+		ProductID:   "product-1",
+		ServiceName: "sync_time",
+		Output: map[string]any{
 			"ignored": true,
 		},
 	})

@@ -6,6 +6,7 @@ const (
 )
 
 type ServiceCallAcknowledgedPayload struct {
+	CommandID   string         `json:"command_id"`
 	TenantID    string         `json:"tenant_id"`
 	ProductID   string         `json:"product_id"`
 	DeviceID    string         `json:"device_id"`

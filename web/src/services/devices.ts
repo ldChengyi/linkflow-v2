@@ -50,6 +50,38 @@ export interface DeviceEventEntry {
   received_at: string;
 }
 
+export type DeviceServiceAckStatus = 'success' | 'failed' | 'pending';
+
+export interface DeviceServiceCallResult {
+  command_id: string;
+  topic: string;
+  service_name: string;
+  input: Record<string, unknown>;
+  sent_at: string;
+}
+
+export interface DeviceServiceCallHistoryEntry {
+  command_id: string;
+  tenant_id: string;
+  product_id: string;
+  product_key: string;
+  device_slug: string;
+  service_name: string;
+  topic: string;
+  input: Record<string, unknown>;
+  occurred_at: string;
+  ack_deadline_at: string;
+  ack_status: DeviceServiceAckStatus;
+  ack_event_id?: string;
+  ack_success?: boolean;
+  ack_code?: string;
+  ack_message?: string;
+  ack_output?: Record<string, unknown>;
+  ack_occurred_at?: string;
+  ack_received_at?: string;
+  ack_deadline_seconds: number;
+}
+
 export interface DeviceListParams extends Record<string, unknown> {
   tenant_id: string;
   product_id?: string;
@@ -59,6 +91,13 @@ export interface DeviceListParams extends Record<string, unknown> {
 
 export interface DeviceEventHistoryParams extends Record<string, unknown> {
   event_name?: string;
+  page: number;
+  page_size: number;
+}
+
+export interface DeviceServiceCallHistoryParams extends Record<string, unknown> {
+  service_name?: string;
+  ack_deadline_seconds: number;
   page: number;
   page_size: number;
 }
@@ -77,6 +116,10 @@ export interface DeviceUpdateInput {
   description: string;
   status: DeviceStatus;
   gateway_device_id: string;
+}
+
+export interface DeviceServiceCallInput {
+  input: Record<string, unknown>;
 }
 
 export interface DeviceDeleteResult {
@@ -105,6 +148,33 @@ export const listDeviceEvents = (
 ) => {
   return apiRequest<PageResult<DeviceEventEntry>>(
     `/api/v1/devices/${deviceId}/events`,
+    {
+      method: 'GET',
+      params,
+    },
+  );
+};
+
+export const callDeviceService = (
+  deviceId: string,
+  serviceName: string,
+  body: DeviceServiceCallInput,
+) => {
+  return apiRequest<DeviceServiceCallResult>(
+    `/api/v1/devices/${deviceId}/services/${serviceName}/call`,
+    {
+      method: 'POST',
+      data: body,
+    },
+  );
+};
+
+export const listDeviceServiceCalls = (
+  deviceId: string,
+  params: DeviceServiceCallHistoryParams,
+) => {
+  return apiRequest<PageResult<DeviceServiceCallHistoryEntry>>(
+    `/api/v1/devices/${deviceId}/services/history`,
     {
       method: 'GET',
       params,

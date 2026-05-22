@@ -19,6 +19,7 @@ import (
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/auth/token"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/config"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/credential"
+	"github.com/ldchengyi/linkflow-v2/service/backend/internal/emqx"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/handler"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/middleware"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/realtime"
@@ -149,7 +150,26 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create device store: %w", err)
 	}
-	deviceService, err := service.NewDeviceService(deviceStore, deviceSecretManager)
+	emqxPublisher, err := emqx.NewPublisher(emqx.PublisherOptions{
+		BaseURL:   cfg.EMQXAPIURL,
+		APIKey:    cfg.EMQXAPIKey,
+		APISecret: cfg.EMQXAPISecret,
+		Timeout:   cfg.EMQXPublishTimeout,
+	})
+	if err != nil {
+		return fmt.Errorf("create emqx publisher: %w", err)
+	}
+	serviceCallPublisher, err := emqx.NewServiceCallPublisher(emqxPublisher)
+	if err != nil {
+		return fmt.Errorf("create service call publisher: %w", err)
+	}
+	deviceService, err := service.NewDeviceService(
+		deviceStore,
+		deviceSecretManager,
+		service.WithDeviceServiceCallTargets(deviceStore),
+		service.WithDeviceServiceCallPublisher(serviceCallPublisher),
+		service.WithDeviceServiceCallRecorder(deviceStore),
+	)
 	if err != nil {
 		return fmt.Errorf("create device service: %w", err)
 	}

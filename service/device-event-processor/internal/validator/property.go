@@ -15,6 +15,10 @@ func validateEventParamValue(name string, def PropertyDefinition, value any) err
 	return validateDefinedValue(name, def, value, ErrInvalidEventValue)
 }
 
+func validateServiceOutputValue(name string, def PropertyDefinition, value any) error {
+	return validateDefinedValue(name, def, value, ErrInvalidServiceOutput)
+}
+
 func validateDefinedValue(name string, def PropertyDefinition, value any, sentinel error) error {
 	switch def.DataType {
 	case DataTypeInt:
