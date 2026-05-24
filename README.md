@@ -1,39 +1,253 @@
-# LinkFlow v2 — Event-Driven IoT Cloud Platform
+# LinkFlow v2
 
-> An IoT cloud platform built on event-driven architecture, with polyglot services and enterprise-grade middleware.
+LinkFlow v2 is an event-driven IoT platform for device access, product and thing-model management, telemetry ingestion, property control, service calls, realtime device state, and an admin web console.
 
-[简体中文](./README_zh-CN.md) | English
+The current runnable stack is centered on Go services, EMQX, Redpanda, TimescaleDB, Redis, and a Umi Max React frontend.
 
-## Background
+## Current Architecture
 
-LinkFlow v1 was a Go monolith with a process-driven architecture. As features grew, it accumulated significant coupling: modules called each other directly, services shared the same database tables, and protocol handling was tangled with business logic. LinkFlow v2 is a ground-up redesign around an event bus and clear domain boundaries.
+```text
+Device
+  -> EMQX MQTT
+  -> EMQX Rule Engine
+  -> Redpanda topic: lf.v1.device.events
+  -> service/device-event-processor
+  -> TimescaleDB + Redis
+  -> Redpanda topic: lf.v1.device.state
+  -> service/backend realtime consumer
+  -> web admin console
+```
 
-## Core Design
+Downlink requests use the same event boundary:
 
-- **Event-Driven Architecture (EDA)** — services communicate asynchronously through a Kafka event bus, with no direct dependencies between them.
-- **Polyglot services** — each language is used where it shines: Go for business logic, Python for AI, Rust for performance-sensitive paths.
-- **Domain-Driven Design (DDD)** — services are split by bounded contexts, each with its own database.
-- **Observability-first** — distributed tracing flows across all languages and services.
+```text
+web/backend REST action
+  -> service/backend publishes requested event
+  -> Redpanda topic: lf.v1.device.events
+  -> service/device-event-processor
+  -> EMQX HTTP API publishes MQTT downlink
+  -> device ACK
+  -> EMQX Rule Engine
+  -> Redpanda
+  -> processor persists ACK/history
+```
 
-## Tech Stack
+The legacy `service/mqtt-gateway` is still kept in the repository for reference, but it is disabled in Docker Compose. The active ingress path is EMQX Rule Engine -> Redpanda -> `service/device-event-processor`.
 
-### Infrastructure
-- **MQTT Broker**: EMQX 5.x
-- **Event Bus**: Redpanda (Kafka API compatible)
-- **Relational DB**: PostgreSQL 16
-- **Time-series DB**: TimescaleDB 2.x
-- **Cache**: Redis 7.x
+## Services
 
-### Application Services
-- **Business services**: Go + Kratos
-- **AI service**: Python + FastAPI
-- **Ingestion layer**: Rust + Tokio
-- **Frontend**: React + TypeScript + Ant Design Pro
+| Path | Role |
+|---|---|
+| `service/backend` | Go HTTP API, auth/session, tenant/product/device/thing-model CRUD, EMQX CONNECT auth, audit logs, device control APIs, realtime WebSocket fan-out |
+| `service/device-event-processor` | Go Kafka consumer for device events, contract validation, thing-model validation, persistence, device online state, downlink publishing through EMQX HTTP API |
+| `service/mqtt-gateway` | Legacy MQTT gateway, currently disabled |
+| `web` | Umi Max + React + TypeScript admin console, served by nginx in Docker |
+| `pkg/public` | Shared Go packages for event contracts, Kafka messaging, PostgreSQL, and Redis |
+| `contracts` | JSON Schema event contracts used by runtime validators |
+| `deploy` | Docker Compose, Dockerfiles, TimescaleDB SQL init files, Redpanda topic init, EMQX auth/ACL/rule init |
 
-## Branching Model
+## Infrastructure
 
-- `main` — release branch. Every commit corresponds to a tagged, runnable version.
-- `dev` — active development branch. Feature work happens here and is merged into `main` via pull request when a milestone is reached.
+Docker Compose starts:
+
+| Service | Default host access |
+|---|---|
+| web/nginx | `http://127.0.0.1` |
+| backend | `http://127.0.0.1:18080` |
+| EMQX MQTT | `127.0.0.1:1883` |
+| EMQX WebSocket | `127.0.0.1:8083` |
+| EMQX Dashboard | `http://127.0.0.1:18083` |
+| Redpanda Kafka | `127.0.0.1:19092` |
+| Redpanda Console | `http://127.0.0.1:8080` |
+| TimescaleDB | `127.0.0.1:5432` |
+| Redis | `127.0.0.1:6379` |
+
+Most runtime values are controlled from `.env`. Start from:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` if local ports, secrets, registry mirrors, or container connection strings need to change. Docker Compose reads the root `.env` automatically.
+
+## Quick Start
+
+Requirements:
+
+- Docker and Docker Compose
+- Go 1.24+ for local service development
+- Node version from `web/.nvmrc`
+- pnpm 11.x for local frontend development
+
+Start the full stack:
+
+```bash
+make up
+```
+
+Inspect services:
+
+```bash
+make ps
+make logs
+```
+
+Rebuild only app containers after backend or processor code changes:
+
+```bash
+make redeploy-app
+```
+
+Rebuild only the web container:
+
+```bash
+make redeploy-web
+```
+
+Apply SQL files, rebuild app/web, and re-run EMQX/Redpanda initializers without dropping data:
+
+```bash
+make hot-redeploy
+```
+
+Stop services:
+
+```bash
+make down
+```
+
+Drop containers and volumes:
+
+```bash
+make clean
+```
+
+## MQTT Device Access
+
+EMQX authenticates device MQTT CONNECT requests through:
+
+```text
+POST /internal/emqx/auth
+```
+
+Devices are authorized with EMQX ACL rules generated by `deploy/init-scripts/emqx/init-emqx.sh`. A device can publish and subscribe only within its own tenant/product/device topic scope.
+
+Topic shape:
+
+```text
+lf/v1/{tenant_slug}/{product_key}/{device_slug}/property/up/post
+lf/v1/{tenant_slug}/{product_key}/{device_slug}/property/up/set_reply
+lf/v1/{tenant_slug}/{product_key}/{device_slug}/event/up/post
+lf/v1/{tenant_slug}/{product_key}/{device_slug}/service/up/{service_name}_reply
+
+lf/v1/{tenant_slug}/{product_key}/{device_slug}/property/down/+
+lf/v1/{tenant_slug}/{product_key}/{device_slug}/event/down/+
+lf/v1/{tenant_slug}/{product_key}/{device_slug}/service/down/+
+```
+
+For a real ESP32 or other physical device, connect to the development machine's LAN IP, not `localhost`.
+
+## Event Contracts
+
+All cross-service events use the shared envelope and payload schemas under `contracts/events`.
+
+Important topics:
+
+| Topic | Purpose |
+|---|---|
+| `lf.v1.device.events` | Raw/requested device events consumed by `device-event-processor` |
+| `lf.v1.device.state` | Post-validation state events consumed by backend realtime fan-out |
+
+Implemented event families include:
+
+- `device.connection.connected`
+- `device.connection.disconnected`
+- `device.connection.changed`
+- `device.property.reported`
+- `device.property.changed`
+- `device.property.set.requested`
+- `device.property.set.acknowledged`
+- `device.event.reported`
+- `device.event.received`
+- `device.service.call.requested`
+- `device.service.call.acknowledged`
+
+## Backend API
+
+The backend listens on `:18080` in Compose and exposes:
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/tenants`
+- `GET /api/v1/products`
+- `GET /api/v1/thingsmodels`
+- `GET /api/v1/devices`
+- `GET /api/v1/devices/{device_id}/properties/latest`
+- `GET /api/v1/devices/{device_id}/properties/trend`
+- `POST /api/v1/devices/{device_id}/property/set`
+- `GET /api/v1/devices/{device_id}/property/set/history`
+- `POST /api/v1/devices/{device_id}/services/{service_name}/call`
+- `GET /api/v1/devices/{device_id}/services/history`
+- `GET /api/v1/devices/{device_id}/events`
+- `GET /api/v1/audit-logs`
+- `GET /api/v1/ws/devices`
+
+Mutating business routes are audited. Tenant-aware data access is enforced through backend stores and database RLS conventions.
+
+## Frontend
+
+The admin console lives under `web` and uses Umi Max, React, TypeScript, Ant Design, Tailwind CSS, Zustand, and ECharts.
+
+Main pages:
+
+- Auth: login/register
+- Admin shell
+- Tenant management
+- Product management
+- Thing-model management
+- Device management
+- Device property/latest/trend/history views
+- Device service call history
+- Audit logs
+- Realtime device event inbox/status
+
+For local frontend development against the Compose backend:
+
+```bash
+make fullstack-test
+```
+
+## Development Checks
+
+Run Go formatting, vet, and tests:
+
+```bash
+make ci
+```
+
+The Makefile uses:
+
+```bash
+GOCACHE=/tmp/linkflow-go-build
+```
+
+so Go checks can run in constrained local environments.
+
+## Branching And Release Flow
+
+- `dev` is the active development branch.
+- `main` is the stable runnable branch.
+
+To publish the latest `dev` state to `main` after committing local changes:
+
+```bash
+git checkout dev
+git pull --ff-only origin dev
+git push origin dev:main
+```
+
+Use the direct ref push only when `main` should exactly receive the current `dev` history. If `main` has diverged, merge or open a pull request instead.
 
 ## License
 
