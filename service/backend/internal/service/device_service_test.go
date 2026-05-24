@@ -4,22 +4,25 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 type fakeDeviceStore struct {
-	created  DeviceCreateInput
-	listed   DeviceListInput
-	got      DeviceGetInput
-	latest   DeviceLatestPropertiesInput
-	events   DeviceEventHistoryInput
-	calls    DeviceServiceCallHistoryInput
-	updated  DeviceUpdateInput
-	deleted  DeviceDeleteInput
-	device   Device
-	target   DeviceServiceCallTarget
-	record   DeviceServiceCallRecord
-	authType string
-	err      error
+	created        DeviceCreateInput
+	listed         DeviceListInput
+	got            DeviceGetInput
+	latest         DeviceLatestPropertiesInput
+	trend          DevicePropertyTrendInput
+	events         DeviceEventHistoryInput
+	calls          DeviceServiceCallHistoryInput
+	propertySets   DevicePropertySetHistoryInput
+	updated        DeviceUpdateInput
+	deleted        DeviceDeleteInput
+	device         Device
+	target         DeviceServiceCallTarget
+	propertyTarget DevicePropertySetTarget
+	authType       string
+	err            error
 }
 
 func (f *fakeDeviceStore) FindDeviceProductAuthType(ctx context.Context, in DeviceProductAuthInput) (string, error) {
@@ -83,6 +86,35 @@ func (f *fakeDeviceStore) FindDeviceLatestProperties(ctx context.Context, in Dev
 	}, nil
 }
 
+func (f *fakeDeviceStore) FindDevicePropertyTrend(ctx context.Context, in DevicePropertyTrendInput) (DevicePropertyTrend, error) {
+	f.trend = in
+	if f.err != nil {
+		return DevicePropertyTrend{}, f.err
+	}
+	return DevicePropertyTrend{
+		DeviceID:      in.DeviceID,
+		TenantID:      "tenant-1",
+		ProductID:     "product-1",
+		ProductKey:    "esp32",
+		DeviceSlug:    "dev-1",
+		Properties:    in.Properties,
+		From:          in.From,
+		To:            in.To,
+		BucketSeconds: in.BucketSeconds,
+		Aggregate:     in.Aggregate,
+		Series: []DevicePropertyTrendSeries{{
+			Property: in.Properties[0],
+			Points: []DevicePropertyTrendPoint{{
+				BucketAt: in.From,
+				Value:    23.5,
+				Min:      23,
+				Max:      24,
+				Count:    2,
+			}},
+		}},
+	}, nil
+}
+
 func (f *fakeDeviceStore) ListDeviceEventHistory(ctx context.Context, in DeviceEventHistoryInput) (PageResult[DeviceEventEntry], error) {
 	f.events = in
 	if f.err != nil {
@@ -107,6 +139,19 @@ func (f *fakeDeviceStore) ListDeviceServiceCallHistory(ctx context.Context, in D
 	return NewPageResult([]DeviceServiceCallHistoryEntry{{
 		CommandID:          "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db9",
 		ServiceName:        "reboot",
+		AckStatus:          "pending",
+		AckDeadlineSeconds: in.AckDeadlineSeconds,
+	}}, 1, in.PageInput), nil
+}
+
+func (f *fakeDeviceStore) ListDevicePropertySetHistory(ctx context.Context, in DevicePropertySetHistoryInput) (PageResult[DevicePropertySetHistoryEntry], error) {
+	f.propertySets = in
+	if f.err != nil {
+		return PageResult[DevicePropertySetHistoryEntry]{}, f.err
+	}
+	return NewPageResult([]DevicePropertySetHistoryEntry{{
+		CommandID:          "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db9",
+		Properties:         map[string]any{"led1": true},
 		AckStatus:          "pending",
 		AckDeadlineSeconds: in.AckDeadlineSeconds,
 	}}, 1, in.PageInput), nil
@@ -146,9 +191,37 @@ func (f *fakeDeviceStore) FindDeviceServiceCallTarget(ctx context.Context, in De
 	}, nil
 }
 
-func (f *fakeDeviceStore) SaveDeviceServiceCall(ctx context.Context, in DeviceServiceCallRecord) error {
-	f.record = in
-	return f.err
+func (f *fakeDeviceStore) FindDevicePropertySetTarget(ctx context.Context, in DevicePropertySetTargetInput) (DevicePropertySetTarget, error) {
+	if f.err != nil {
+		return DevicePropertySetTarget{}, f.err
+	}
+	if f.propertyTarget.DeviceID != "" {
+		return f.propertyTarget, nil
+	}
+	return DevicePropertySetTarget{
+		TenantID:         "tenant-1",
+		ProductID:        "product-1",
+		DeviceID:         in.DeviceID,
+		TenantSlug:       "default",
+		ProductKey:       "esp32",
+		DeviceSlug:       "dev-1",
+		DeviceStatus:     activeDeviceStatus,
+		ConnectionStatus: "online",
+		Properties: ThingsModelObject{
+			"led1": map[string]any{
+				"name":        "LED 1",
+				"data_type":   "bool",
+				"required":    false,
+				"access_mode": "readwrite",
+			},
+			"temperature": map[string]any{
+				"name":        "Temperature",
+				"data_type":   "float",
+				"required":    false,
+				"access_mode": "read",
+			},
+		},
+	}, nil
 }
 
 func (f *fakeDeviceStore) UpdateDevice(ctx context.Context, in DeviceUpdateInput) (Device, error) {
@@ -180,6 +253,16 @@ type fakeDeviceServiceCallPublisher struct {
 }
 
 func (f *fakeDeviceServiceCallPublisher) PublishServiceCall(ctx context.Context, in DeviceServiceCallMessage) error {
+	f.message = in
+	return f.err
+}
+
+type fakeDevicePropertySetPublisher struct {
+	message DevicePropertySetMessage
+	err     error
+}
+
+func (f *fakeDevicePropertySetPublisher) PublishPropertySet(ctx context.Context, in DevicePropertySetMessage) error {
 	f.message = in
 	return f.err
 }
@@ -275,10 +358,10 @@ func TestDeviceServiceCreateNormalizesInputAndDefaults(t *testing.T) {
 	}
 }
 
-func TestDeviceServiceCallServicePublishesValidatedInput(t *testing.T) {
+func TestDeviceServiceCallServicePublishesRequestedEventWithValidatedInput(t *testing.T) {
 	store := &fakeDeviceStore{}
 	publisher := &fakeDeviceServiceCallPublisher{}
-	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher), WithDeviceServiceCallRecorder(store))
+	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher))
 
 	result, err := svc.CallService(context.Background(), DeviceServiceCallInput{
 		UserID:      "user-1",
@@ -300,21 +383,70 @@ func TestDeviceServiceCallServicePublishesValidatedInput(t *testing.T) {
 	if publisher.message.CommandID != result.CommandID {
 		t.Fatalf("published command_id = %q, want %q", publisher.message.CommandID, result.CommandID)
 	}
+	if publisher.message.TenantID != "tenant-1" || publisher.message.DeviceID != "device-1" {
+		t.Fatalf("published target = %+v, want resolved target ids", publisher.message)
+	}
+	if publisher.message.RequestedBy != "user-1" {
+		t.Fatalf("published requested_by = %q, want user-1", publisher.message.RequestedBy)
+	}
 	if publisher.message.Input["delay"] != float64(5) {
 		t.Fatalf("published input = %v, want delay", publisher.message.Input)
 	}
-	if store.record.CommandID != result.CommandID {
-		t.Fatalf("stored command_id = %q, want %q", store.record.CommandID, result.CommandID)
+}
+
+func TestDeviceServiceSetPropertiesPublishesRequestedEventWithWritableProperties(t *testing.T) {
+	store := &fakeDeviceStore{}
+	publisher := &fakeDevicePropertySetPublisher{}
+	svc := newTestDeviceService(t, store, WithDevicePropertySetPublisher(publisher))
+
+	result, err := svc.SetProperties(context.Background(), DevicePropertySetInput{
+		UserID:   "user-1",
+		DeviceID: "device-1",
+		Properties: map[string]any{
+			"led1": true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("SetProperties() error = %v", err)
 	}
-	if store.record.ServiceName != "reboot" || store.record.Topic != result.Topic {
-		t.Fatalf("stored record = %+v, want service call record", store.record)
+	if result.CommandID == "" {
+		t.Fatal("CommandID should be generated")
+	}
+	if result.Topic != "lf/v1/default/esp32/dev-1/property/down/set" {
+		t.Fatalf("Topic = %q, want property down set topic", result.Topic)
+	}
+	if publisher.message.CommandID != result.CommandID {
+		t.Fatalf("published command_id = %q, want %q", publisher.message.CommandID, result.CommandID)
+	}
+	if publisher.message.Properties["led1"] != true {
+		t.Fatalf("published properties = %v, want led1", publisher.message.Properties)
+	}
+}
+
+func TestDeviceServiceSetPropertiesRejectsReadOnlyProperty(t *testing.T) {
+	store := &fakeDeviceStore{}
+	publisher := &fakeDevicePropertySetPublisher{}
+	svc := newTestDeviceService(t, store, WithDevicePropertySetPublisher(publisher))
+
+	_, err := svc.SetProperties(context.Background(), DevicePropertySetInput{
+		UserID:   "user-1",
+		DeviceID: "device-1",
+		Properties: map[string]any{
+			"temperature": float64(23.5),
+		},
+	})
+	if !errors.Is(err, ErrInvalidDeviceInput) {
+		t.Fatalf("err = %v, want ErrInvalidDeviceInput", err)
+	}
+	if publisher.message.Topic != "" {
+		t.Fatal("publisher should not be called")
 	}
 }
 
 func TestDeviceServiceCallServiceRejectsUnknownService(t *testing.T) {
 	store := &fakeDeviceStore{}
 	publisher := &fakeDeviceServiceCallPublisher{}
-	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher), WithDeviceServiceCallRecorder(store))
+	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher))
 
 	_, err := svc.CallService(context.Background(), DeviceServiceCallInput{
 		UserID:      "user-1",
@@ -333,7 +465,7 @@ func TestDeviceServiceCallServiceRejectsUnknownService(t *testing.T) {
 func TestDeviceServiceCallServiceRejectsMissingRequiredInput(t *testing.T) {
 	store := &fakeDeviceStore{}
 	publisher := &fakeDeviceServiceCallPublisher{}
-	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher), WithDeviceServiceCallRecorder(store))
+	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher))
 
 	_, err := svc.CallService(context.Background(), DeviceServiceCallInput{
 		UserID:      "user-1",
@@ -362,7 +494,7 @@ func TestDeviceServiceCallServiceRejectsOfflineDevice(t *testing.T) {
 		},
 	}
 	publisher := &fakeDeviceServiceCallPublisher{}
-	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher), WithDeviceServiceCallRecorder(store))
+	svc := newTestDeviceService(t, store, WithDeviceServiceCallTargets(store), WithDeviceServiceCallPublisher(publisher))
 
 	_, err := svc.CallService(context.Background(), DeviceServiceCallInput{
 		UserID:      "user-1",
@@ -521,6 +653,118 @@ func TestDeviceServiceLatestPropertiesPassesNormalizedInput(t *testing.T) {
 	}
 }
 
+func TestDeviceServicePropertyTrendNormalizesInput(t *testing.T) {
+	store := &fakeDeviceStore{}
+	svc := newTestDeviceService(t, store)
+	from := time.Date(2026, 5, 22, 0, 0, 0, 0, time.UTC)
+	to := from.Add(2 * time.Hour)
+
+	result, err := svc.PropertyTrend(context.Background(), DevicePropertyTrendInput{
+		UserID:        " user-1 ",
+		DeviceID:      " device-1 ",
+		Properties:    []string{" temperature ", "humidity", "temperature"},
+		From:          from,
+		To:            to,
+		BucketSeconds: 0,
+		Aggregate:     "",
+	})
+	if err != nil {
+		t.Fatalf("PropertyTrend() error = %v", err)
+	}
+	if store.trend.UserID != "user-1" || store.trend.DeviceID != "device-1" {
+		t.Fatalf("PropertyTrend input = %+v, want normalized user/device", store.trend)
+	}
+	if got := store.trend.Properties; len(got) != 2 || got[0] != "temperature" || got[1] != "humidity" {
+		t.Fatalf("Properties = %v, want deduplicated temperature/humidity", got)
+	}
+	if store.trend.BucketSeconds != defaultTrendBucketSeconds || store.trend.Aggregate != "avg" {
+		t.Fatalf("trend defaults = %d/%q, want %d/avg", store.trend.BucketSeconds, store.trend.Aggregate, defaultTrendBucketSeconds)
+	}
+	if result.Aggregate != "avg" || len(result.Series) != 1 || result.Series[0].Property != "temperature" {
+		t.Fatalf("PropertyTrend result = %+v, want temperature series", result)
+	}
+}
+
+func TestDeviceServicePropertyTrendRejectsInvalidInput(t *testing.T) {
+	svc := newTestDeviceService(t, &fakeDeviceStore{})
+	from := time.Date(2026, 5, 22, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name string
+		in   DevicePropertyTrendInput
+	}{
+		{
+			name: "missing property",
+			in: DevicePropertyTrendInput{
+				UserID:   "user-1",
+				DeviceID: "device-1",
+				From:     from,
+				To:       from.Add(time.Hour),
+			},
+		},
+		{
+			name: "invalid property",
+			in: DevicePropertyTrendInput{
+				UserID:     "user-1",
+				DeviceID:   "device-1",
+				Properties: []string{"bad property"},
+				From:       from,
+				To:         from.Add(time.Hour),
+			},
+		},
+		{
+			name: "invalid time range",
+			in: DevicePropertyTrendInput{
+				UserID:     "user-1",
+				DeviceID:   "device-1",
+				Properties: []string{"temperature"},
+				From:       from,
+				To:         from,
+			},
+		},
+		{
+			name: "range too large",
+			in: DevicePropertyTrendInput{
+				UserID:     "user-1",
+				DeviceID:   "device-1",
+				Properties: []string{"temperature"},
+				From:       from,
+				To:         from.Add(maxTrendRange + time.Second),
+			},
+		},
+		{
+			name: "invalid bucket",
+			in: DevicePropertyTrendInput{
+				UserID:        "user-1",
+				DeviceID:      "device-1",
+				Properties:    []string{"temperature"},
+				From:          from,
+				To:            from.Add(time.Hour),
+				BucketSeconds: 1,
+			},
+		},
+		{
+			name: "invalid aggregate",
+			in: DevicePropertyTrendInput{
+				UserID:     "user-1",
+				DeviceID:   "device-1",
+				Properties: []string{"temperature"},
+				From:       from,
+				To:         from.Add(time.Hour),
+				Aggregate:  "sum",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := svc.PropertyTrend(context.Background(), tc.in); !errors.Is(err, ErrInvalidDeviceInput) {
+				t.Fatalf("PropertyTrend() error = %v, want ErrInvalidDeviceInput", err)
+			}
+		})
+	}
+}
+
 func TestDeviceServiceEventHistoryNormalizesInputAndPagination(t *testing.T) {
 	store := &fakeDeviceStore{}
 	svc := newTestDeviceService(t, store)
@@ -570,6 +814,34 @@ func TestDeviceServiceCallHistoryNormalizesInputDeadlineAndPagination(t *testing
 	}
 	if result.Total != 1 || len(result.Items) != 1 || result.Items[0].ServiceName != "reboot" {
 		t.Fatalf("ServiceCallHistory result = %+v, want one call", result)
+	}
+}
+
+func TestDeviceServicePropertySetHistoryNormalizesInputDeadlineAndPagination(t *testing.T) {
+	store := &fakeDeviceStore{}
+	svc := newTestDeviceService(t, store)
+
+	result, err := svc.PropertySetHistory(context.Background(), DevicePropertySetHistoryInput{
+		UserID:             " user-1 ",
+		DeviceID:           " device-1 ",
+		PropertyName:       " led1 ",
+		AckDeadlineSeconds: 0,
+		PageInput:          PageInput{Page: -1, PageSize: 1000},
+	})
+	if err != nil {
+		t.Fatalf("PropertySetHistory() error = %v", err)
+	}
+	if store.propertySets.UserID != "user-1" || store.propertySets.DeviceID != "device-1" || store.propertySets.PropertyName != "led1" {
+		t.Fatalf("PropertySetHistory input = %+v, want normalized user/device/property", store.propertySets)
+	}
+	if store.propertySets.AckDeadlineSeconds != 90 {
+		t.Fatalf("AckDeadlineSeconds = %d, want default 90", store.propertySets.AckDeadlineSeconds)
+	}
+	if store.propertySets.Page != defaultPage || store.propertySets.PageSize != maxPageSize {
+		t.Fatalf("PageInput = %+v, want page %d page_size %d", store.propertySets.PageInput, defaultPage, maxPageSize)
+	}
+	if result.Total != 1 || len(result.Items) != 1 || result.Items[0].Properties["led1"] != true {
+		t.Fatalf("PropertySetHistory result = %+v, want one property set", result)
 	}
 }
 

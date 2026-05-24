@@ -7,6 +7,7 @@ RULE_NAME="device.property.set.acknowledged"
 RULE_SQL=$(cat <<'SQL'
 SELECT
   json_decode(payload) as payload.raw,
+  payload.command_id as payload.command_id,
   payload.success as payload.success,
   payload.code as payload.code,
   payload.message as payload.message,

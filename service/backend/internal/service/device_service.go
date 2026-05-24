@@ -26,6 +26,12 @@ const (
 	offlineDeviceConnection = "offline"
 	defaultDeviceStatus     = activeDeviceStatus
 	defaultDeviceConnection = offlineDeviceConnection
+
+	defaultTrendBucketSeconds = 60
+	minTrendBucketSeconds     = 10
+	maxTrendBucketSeconds     = 86400
+	maxTrendRange             = 31 * 24 * time.Hour
+	maxTrendProperties        = 8
 )
 
 type Device struct {
@@ -104,6 +110,43 @@ type DeviceLatestProperties struct {
 	ReceivedAt *time.Time     `json:"received_at,omitempty"`
 }
 
+type DevicePropertyTrendInput struct {
+	UserID        string
+	DeviceID      string
+	Properties    []string
+	From          time.Time
+	To            time.Time
+	BucketSeconds int
+	Aggregate     string
+}
+
+type DevicePropertyTrendPoint struct {
+	BucketAt time.Time `json:"bucket_at"`
+	Value    float64   `json:"value"`
+	Min      float64   `json:"min"`
+	Max      float64   `json:"max"`
+	Count    int       `json:"count"`
+}
+
+type DevicePropertyTrendSeries struct {
+	Property string                     `json:"property"`
+	Points   []DevicePropertyTrendPoint `json:"points"`
+}
+
+type DevicePropertyTrend struct {
+	DeviceID      string                      `json:"device_id"`
+	TenantID      string                      `json:"tenant_id"`
+	ProductID     string                      `json:"product_id"`
+	ProductKey    string                      `json:"product_key"`
+	DeviceSlug    string                      `json:"device_slug"`
+	Properties    []string                    `json:"properties"`
+	From          time.Time                   `json:"from"`
+	To            time.Time                   `json:"to"`
+	BucketSeconds int                         `json:"bucket_seconds"`
+	Aggregate     string                      `json:"agg"`
+	Series        []DevicePropertyTrendSeries `json:"series"`
+}
+
 type DeviceEventHistoryInput struct {
 	UserID    string
 	DeviceID  string
@@ -117,6 +160,27 @@ type DeviceServiceCallHistoryInput struct {
 	ServiceName        string
 	AckDeadlineSeconds int
 	PageInput
+}
+
+type DevicePropertySetHistoryInput struct {
+	UserID             string
+	DeviceID           string
+	PropertyName       string
+	AckDeadlineSeconds int
+	PageInput
+}
+
+type DevicePropertySetInput struct {
+	UserID     string
+	DeviceID   string
+	Properties map[string]any
+}
+
+type DevicePropertySetResult struct {
+	CommandID  string         `json:"command_id"`
+	Topic      string         `json:"topic"`
+	Properties map[string]any `json:"properties"`
+	SentAt     time.Time      `json:"sent_at"`
 }
 
 type DeviceEventEntry struct {
@@ -153,6 +217,27 @@ type DeviceServiceCallHistoryEntry struct {
 	AckDeadlineSeconds int            `json:"ack_deadline_seconds"`
 }
 
+type DevicePropertySetHistoryEntry struct {
+	CommandID          string         `json:"command_id"`
+	TenantID           string         `json:"tenant_id"`
+	ProductID          string         `json:"product_id"`
+	ProductKey         string         `json:"product_key"`
+	DeviceSlug         string         `json:"device_slug"`
+	Topic              string         `json:"topic"`
+	Properties         map[string]any `json:"properties"`
+	OccurredAt         time.Time      `json:"occurred_at"`
+	AckDeadlineAt      time.Time      `json:"ack_deadline_at"`
+	AckStatus          string         `json:"ack_status"`
+	AckEventID         string         `json:"ack_event_id,omitempty"`
+	AckSuccess         *bool          `json:"ack_success,omitempty"`
+	AckCode            string         `json:"ack_code,omitempty"`
+	AckMessage         string         `json:"ack_message,omitempty"`
+	AckProperties      map[string]any `json:"ack_properties,omitempty"`
+	AckOccurredAt      *time.Time     `json:"ack_occurred_at,omitempty"`
+	AckReceivedAt      *time.Time     `json:"ack_received_at,omitempty"`
+	AckDeadlineSeconds int            `json:"ack_deadline_seconds"`
+}
+
 type DeviceServiceCallInput struct {
 	UserID      string
 	DeviceID    string
@@ -168,29 +253,36 @@ type DeviceServiceCallResult struct {
 	SentAt      time.Time      `json:"sent_at"`
 }
 
-type DeviceServiceCallRecord struct {
-	CommandID   string
-	TenantID    string
-	ProductKey  string
-	DeviceSlug  string
-	ServiceName string
-	Protocol    string
-	Topic       string
-	RequestedBy string
-	Input       map[string]any
-	OccurredAt  time.Time
-}
-
 type DeviceStore interface {
 	FindDeviceProductAuthType(ctx context.Context, in DeviceProductAuthInput) (string, error)
 	CreateDevice(ctx context.Context, in DeviceCreateInput) (Device, error)
 	ListDevices(ctx context.Context, in DeviceListInput) (PageResult[Device], error)
 	FindDeviceByID(ctx context.Context, in DeviceGetInput) (Device, error)
 	FindDeviceLatestProperties(ctx context.Context, in DeviceLatestPropertiesInput) (DeviceLatestProperties, error)
+	FindDevicePropertyTrend(ctx context.Context, in DevicePropertyTrendInput) (DevicePropertyTrend, error)
 	ListDeviceEventHistory(ctx context.Context, in DeviceEventHistoryInput) (PageResult[DeviceEventEntry], error)
 	ListDeviceServiceCallHistory(ctx context.Context, in DeviceServiceCallHistoryInput) (PageResult[DeviceServiceCallHistoryEntry], error)
+	ListDevicePropertySetHistory(ctx context.Context, in DevicePropertySetHistoryInput) (PageResult[DevicePropertySetHistoryEntry], error)
+	FindDevicePropertySetTarget(ctx context.Context, in DevicePropertySetTargetInput) (DevicePropertySetTarget, error)
 	UpdateDevice(ctx context.Context, in DeviceUpdateInput) (Device, error)
 	DeleteDevice(ctx context.Context, in DeviceDeleteInput) error
+}
+
+type DevicePropertySetTargetInput struct {
+	UserID   string
+	DeviceID string
+}
+
+type DevicePropertySetTarget struct {
+	TenantID         string
+	ProductID        string
+	DeviceID         string
+	TenantSlug       string
+	ProductKey       string
+	DeviceSlug       string
+	DeviceStatus     string
+	ConnectionStatus string
+	Properties       ThingsModelObject
 }
 
 type DeviceServiceCallTargetInput struct {
@@ -215,18 +307,42 @@ type DeviceServiceCallTargetStore interface {
 }
 
 type DeviceServiceCallMessage struct {
+	TenantID    string
+	ProductID   string
+	DeviceID    string
+	TenantSlug  string
+	ProductKey  string
+	DeviceSlug  string
+	Protocol    string
 	Topic       string
 	CommandID   string
 	ServiceName string
+	RequestedBy string
 	Input       map[string]any
+	OccurredAt  time.Time
+}
+
+type DevicePropertySetMessage struct {
+	TenantID    string
+	ProductID   string
+	DeviceID    string
+	TenantSlug  string
+	ProductKey  string
+	DeviceSlug  string
+	Protocol    string
+	Topic       string
+	CommandID   string
+	RequestedBy string
+	Properties  map[string]any
+	OccurredAt  time.Time
 }
 
 type DeviceServiceCallPublisher interface {
 	PublishServiceCall(ctx context.Context, in DeviceServiceCallMessage) error
 }
 
-type DeviceServiceCallRecorder interface {
-	SaveDeviceServiceCall(ctx context.Context, in DeviceServiceCallRecord) error
+type DevicePropertySetPublisher interface {
+	PublishPropertySet(ctx context.Context, in DevicePropertySetMessage) error
 }
 
 type DeviceProductAuthInput struct {
@@ -246,7 +362,7 @@ type DeviceService struct {
 	secrets              DeviceSecretManager
 	serviceCallTargets   DeviceServiceCallTargetStore
 	serviceCallPublisher DeviceServiceCallPublisher
-	serviceCallRecorder  DeviceServiceCallRecorder
+	propertySetPublisher DevicePropertySetPublisher
 }
 
 type DeviceServiceOption func(*DeviceService)
@@ -263,9 +379,9 @@ func WithDeviceServiceCallPublisher(publisher DeviceServiceCallPublisher) Device
 	}
 }
 
-func WithDeviceServiceCallRecorder(recorder DeviceServiceCallRecorder) DeviceServiceOption {
+func WithDevicePropertySetPublisher(publisher DevicePropertySetPublisher) DeviceServiceOption {
 	return func(s *DeviceService) {
-		s.serviceCallRecorder = recorder
+		s.propertySetPublisher = publisher
 	}
 }
 
@@ -375,6 +491,36 @@ func (s *DeviceService) LatestProperties(ctx context.Context, in DeviceLatestPro
 	return s.devices.FindDeviceLatestProperties(ctx, in)
 }
 
+func (s *DeviceService) PropertyTrend(ctx context.Context, in DevicePropertyTrendInput) (DevicePropertyTrend, error) {
+	if err := ctx.Err(); err != nil {
+		return DevicePropertyTrend{}, err
+	}
+	in.UserID = strings.TrimSpace(in.UserID)
+	in.DeviceID = strings.TrimSpace(in.DeviceID)
+	in.Aggregate = strings.ToLower(strings.TrimSpace(in.Aggregate))
+	if in.Aggregate == "" {
+		in.Aggregate = "avg"
+	}
+	if in.BucketSeconds <= 0 {
+		in.BucketSeconds = defaultTrendBucketSeconds
+	}
+	properties, ok := normalizeTrendProperties(in.Properties)
+	if in.UserID == "" || in.DeviceID == "" || !ok || in.From.IsZero() || in.To.IsZero() || !in.From.Before(in.To) {
+		return DevicePropertyTrend{}, ErrInvalidDeviceInput
+	}
+	if in.To.Sub(in.From) > maxTrendRange {
+		return DevicePropertyTrend{}, ErrInvalidDeviceInput
+	}
+	if in.BucketSeconds < minTrendBucketSeconds || in.BucketSeconds > maxTrendBucketSeconds {
+		return DevicePropertyTrend{}, ErrInvalidDeviceInput
+	}
+	if !validTrendAggregate(in.Aggregate) {
+		return DevicePropertyTrend{}, ErrInvalidDeviceInput
+	}
+	in.Properties = properties
+	return s.devices.FindDevicePropertyTrend(ctx, in)
+}
+
 func (s *DeviceService) EventHistory(ctx context.Context, in DeviceEventHistoryInput) (PageResult[DeviceEventEntry], error) {
 	if err := ctx.Err(); err != nil {
 		return PageResult[DeviceEventEntry]{}, err
@@ -412,6 +558,93 @@ func (s *DeviceService) ServiceCallHistory(ctx context.Context, in DeviceService
 	return s.devices.ListDeviceServiceCallHistory(ctx, in)
 }
 
+func (s *DeviceService) PropertySetHistory(ctx context.Context, in DevicePropertySetHistoryInput) (PageResult[DevicePropertySetHistoryEntry], error) {
+	if err := ctx.Err(); err != nil {
+		return PageResult[DevicePropertySetHistoryEntry]{}, err
+	}
+	in.UserID = strings.TrimSpace(in.UserID)
+	in.DeviceID = strings.TrimSpace(in.DeviceID)
+	in.PropertyName = strings.TrimSpace(in.PropertyName)
+	if in.UserID == "" || in.DeviceID == "" {
+		return PageResult[DevicePropertySetHistoryEntry]{}, ErrInvalidDeviceInput
+	}
+	if in.PropertyName != "" && !validThingsModelIdentifier(in.PropertyName) {
+		return PageResult[DevicePropertySetHistoryEntry]{}, ErrInvalidDeviceInput
+	}
+	if in.AckDeadlineSeconds <= 0 {
+		in.AckDeadlineSeconds = 90
+	}
+	if in.AckDeadlineSeconds > 3600 {
+		in.AckDeadlineSeconds = 3600
+	}
+	in.PageInput = NormalizePageInput(in.PageInput)
+	return s.devices.ListDevicePropertySetHistory(ctx, in)
+}
+
+func (s *DeviceService) SetProperties(ctx context.Context, in DevicePropertySetInput) (DevicePropertySetResult, error) {
+	if err := ctx.Err(); err != nil {
+		return DevicePropertySetResult{}, err
+	}
+	if s.propertySetPublisher == nil {
+		return DevicePropertySetResult{}, ErrDeviceCommandPublisherUnavailable
+	}
+	in.UserID = strings.TrimSpace(in.UserID)
+	in.DeviceID = strings.TrimSpace(in.DeviceID)
+	if in.UserID == "" || in.DeviceID == "" || len(in.Properties) == 0 {
+		return DevicePropertySetResult{}, ErrInvalidDeviceInput
+	}
+
+	target, err := s.devices.FindDevicePropertySetTarget(ctx, DevicePropertySetTargetInput{
+		UserID:   in.UserID,
+		DeviceID: in.DeviceID,
+	})
+	if err != nil {
+		return DevicePropertySetResult{}, err
+	}
+	if target.DeviceStatus != activeDeviceStatus {
+		return DevicePropertySetResult{}, ErrInvalidDeviceInput
+	}
+	if target.ConnectionStatus != "online" {
+		return DevicePropertySetResult{}, ErrDeviceOffline
+	}
+
+	acceptedProperties, err := validateDevicePropertySetInput(target.Properties, in.Properties)
+	if err != nil {
+		return DevicePropertySetResult{}, err
+	}
+
+	commandID, err := newDeviceCommandID()
+	if err != nil {
+		return DevicePropertySetResult{}, err
+	}
+	requestedAt := time.Now().UTC()
+	topic := devicePropertySetDownTopic(target.TenantSlug, target.ProductKey, target.DeviceSlug)
+	message := DevicePropertySetMessage{
+		TenantID:    target.TenantID,
+		ProductID:   target.ProductID,
+		DeviceID:    target.DeviceID,
+		TenantSlug:  target.TenantSlug,
+		ProductKey:  target.ProductKey,
+		DeviceSlug:  target.DeviceSlug,
+		Protocol:    "mqtt",
+		Topic:       topic,
+		CommandID:   commandID,
+		RequestedBy: in.UserID,
+		Properties:  acceptedProperties,
+		OccurredAt:  requestedAt,
+	}
+	if err := s.propertySetPublisher.PublishPropertySet(ctx, message); err != nil {
+		return DevicePropertySetResult{}, fmt.Errorf("publish device property set requested event: %w", err)
+	}
+
+	return DevicePropertySetResult{
+		CommandID:  commandID,
+		Topic:      topic,
+		Properties: acceptedProperties,
+		SentAt:     requestedAt,
+	}, nil
+}
+
 func (s *DeviceService) CallService(ctx context.Context, in DeviceServiceCallInput) (DeviceServiceCallResult, error) {
 	if err := ctx.Err(); err != nil {
 		return DeviceServiceCallResult{}, err
@@ -420,9 +653,6 @@ func (s *DeviceService) CallService(ctx context.Context, in DeviceServiceCallInp
 		return DeviceServiceCallResult{}, ErrDeviceCommandPublisherUnavailable
 	}
 	if s.serviceCallPublisher == nil {
-		return DeviceServiceCallResult{}, ErrDeviceCommandPublisherUnavailable
-	}
-	if s.serviceCallRecorder == nil {
 		return DeviceServiceCallResult{}, ErrDeviceCommandPublisherUnavailable
 	}
 	in.UserID = strings.TrimSpace(in.UserID)
@@ -458,30 +688,25 @@ func (s *DeviceService) CallService(ctx context.Context, in DeviceServiceCallInp
 	if err != nil {
 		return DeviceServiceCallResult{}, err
 	}
+	requestedAt := time.Now().UTC()
 	topic := deviceServiceDownTopic(target.TenantSlug, target.ProductKey, target.DeviceSlug, in.ServiceName)
 	message := DeviceServiceCallMessage{
-		Topic:       topic,
-		CommandID:   commandID,
-		ServiceName: in.ServiceName,
-		Input:       acceptedInput,
-	}
-	if err := s.serviceCallPublisher.PublishServiceCall(ctx, message); err != nil {
-		return DeviceServiceCallResult{}, fmt.Errorf("publish device service call: %w", err)
-	}
-	sentAt := time.Now().UTC()
-	if err := s.serviceCallRecorder.SaveDeviceServiceCall(ctx, DeviceServiceCallRecord{
-		CommandID:   commandID,
 		TenantID:    target.TenantID,
+		ProductID:   target.ProductID,
+		DeviceID:    target.DeviceID,
+		TenantSlug:  target.TenantSlug,
 		ProductKey:  target.ProductKey,
 		DeviceSlug:  target.DeviceSlug,
-		ServiceName: in.ServiceName,
 		Protocol:    "mqtt",
 		Topic:       topic,
+		CommandID:   commandID,
+		ServiceName: in.ServiceName,
 		RequestedBy: in.UserID,
 		Input:       acceptedInput,
-		OccurredAt:  sentAt,
-	}); err != nil {
-		return DeviceServiceCallResult{}, fmt.Errorf("save device service call: %w", err)
+		OccurredAt:  requestedAt,
+	}
+	if err := s.serviceCallPublisher.PublishServiceCall(ctx, message); err != nil {
+		return DeviceServiceCallResult{}, fmt.Errorf("publish device service call requested event: %w", err)
 	}
 
 	return DeviceServiceCallResult{
@@ -489,7 +714,7 @@ func (s *DeviceService) CallService(ctx context.Context, in DeviceServiceCallInp
 		Topic:       topic,
 		ServiceName: in.ServiceName,
 		Input:       acceptedInput,
-		SentAt:      sentAt,
+		SentAt:      requestedAt,
 	}, nil
 }
 
@@ -548,8 +773,44 @@ func validDeviceStatus(status string) bool {
 	}
 }
 
+func normalizeTrendProperties(properties []string) ([]string, bool) {
+	seen := make(map[string]struct{}, len(properties))
+	out := make([]string, 0, len(properties))
+	for _, property := range properties {
+		property = strings.TrimSpace(property)
+		if property == "" {
+			continue
+		}
+		if !validThingsModelIdentifier(property) {
+			return nil, false
+		}
+		if _, exists := seen[property]; exists {
+			continue
+		}
+		seen[property] = struct{}{}
+		out = append(out, property)
+	}
+	if len(out) == 0 || len(out) > maxTrendProperties {
+		return nil, false
+	}
+	return out, true
+}
+
+func validTrendAggregate(aggregate string) bool {
+	switch aggregate {
+	case "avg", "min", "max", "last":
+		return true
+	default:
+		return false
+	}
+}
+
 func deviceServiceDownTopic(tenantSlug string, productKey string, deviceSlug string, serviceName string) string {
 	return "lf/v1/" + tenantSlug + "/" + productKey + "/" + deviceSlug + "/service/down/" + serviceName
+}
+
+func devicePropertySetDownTopic(tenantSlug string, productKey string, deviceSlug string) string {
+	return "lf/v1/" + tenantSlug + "/" + productKey + "/" + deviceSlug + "/property/down/set"
 }
 
 func newDeviceCommandID() (string, error) {
@@ -568,6 +829,36 @@ func newDeviceCommandID() (string, error) {
 	out[23] = '-'
 	hex.Encode(out[24:36], b[10:16])
 	return string(out), nil
+}
+
+func validateDevicePropertySetInput(propertiesDef ThingsModelObject, properties map[string]any) (map[string]any, error) {
+	if len(properties) == 0 {
+		return nil, ErrInvalidDeviceInput
+	}
+
+	accepted := make(map[string]any, len(properties))
+	for name, value := range properties {
+		if !validThingsModelIdentifier(name) {
+			return nil, ErrInvalidDeviceInput
+		}
+		defRaw, ok := propertiesDef[name]
+		if !ok {
+			return nil, ErrInvalidDeviceInput
+		}
+		def, ok := thingsModelDefinitionObject(defRaw)
+		if !ok {
+			return nil, ErrInvalidDeviceInput
+		}
+		accessMode := optionalString(def, "access_mode")
+		if accessMode != propertyAccessWrite && accessMode != propertyAccessReadWrite {
+			return nil, ErrInvalidDeviceInput
+		}
+		if err := validateDeviceServiceCallValue(name, def, value); err != nil {
+			return nil, err
+		}
+		accepted[name] = value
+	}
+	return accepted, nil
 }
 
 func validateDeviceServiceCallInput(serviceName string, services ThingsModelObject, input map[string]any) (map[string]any, error) {

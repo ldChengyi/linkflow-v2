@@ -66,6 +66,10 @@ interface PropertyDraft extends ParamDraft {
   accessMode: PropertyAccessMode;
 }
 
+interface PropertyDraftRow extends PropertyDraft {
+  localId: string;
+}
+
 interface EventDraft {
   identifier: string;
   name: string;
@@ -73,11 +77,22 @@ interface EventDraft {
   level: EventLevel;
 }
 
+interface EventDraftRow extends EventDraft {
+  localId: string;
+  outputParams: ParamDraftRow[];
+}
+
 interface ServiceDraft {
   identifier: string;
   name: string;
   desc: string;
   callType: ServiceCallType;
+}
+
+interface ServiceDraftRow extends ServiceDraft {
+  localId: string;
+  inputParams: ParamDraftRow[];
+  outputParams: ParamDraftRow[];
 }
 
 const emptyObjectText = '{}';
@@ -118,6 +133,13 @@ const createParamDraftRow = (): ParamDraftRow => ({
   localId: createLocalId(),
 });
 
+const createPropertyDraftRow = (
+  draft: PropertyDraft = emptyPropertyDraft,
+): PropertyDraftRow => ({
+  ...draft,
+  localId: createLocalId(),
+});
+
 const emptyPropertyDraft: PropertyDraft = {
   ...emptyParamDraft,
   accessMode: 'readwrite',
@@ -136,6 +158,26 @@ const emptyServiceDraft: ServiceDraft = {
   desc: '',
   callType: 'sync',
 };
+
+const createEventDraftRow = (
+  draft: EventDraft = emptyEventDraft,
+  outputParams: ParamDraftRow[] = [],
+): EventDraftRow => ({
+  ...draft,
+  localId: createLocalId(),
+  outputParams,
+});
+
+const createServiceDraftRow = (
+  draft: ServiceDraft = emptyServiceDraft,
+  inputParams: ParamDraftRow[] = [],
+  outputParams: ParamDraftRow[] = [],
+): ServiceDraftRow => ({
+  ...draft,
+  localId: createLocalId(),
+  inputParams,
+  outputParams,
+});
 
 const pageSizeOptions = [10, 20, 50];
 
@@ -247,6 +289,132 @@ const intOrUndefined = (value: string) => {
   return nextValue;
 };
 
+const stringFromUnknown = (value: unknown) => {
+  return typeof value === 'string' ? value : '';
+};
+
+const boolFromUnknown = (value: unknown) => {
+  return typeof value === 'boolean' ? value : false;
+};
+
+const dataTypeFromUnknown = (value: unknown): PropertyDataType => {
+  switch (value) {
+    case 'int':
+    case 'float':
+    case 'double':
+    case 'bool':
+    case 'string':
+      return value;
+    default:
+      return 'string';
+  }
+};
+
+const accessModeFromUnknown = (value: unknown): PropertyAccessMode => {
+  switch (value) {
+    case 'read':
+    case 'write':
+    case 'readwrite':
+      return value;
+    default:
+      return 'readwrite';
+  }
+};
+
+const eventLevelFromUnknown = (value: unknown): EventLevel => {
+  switch (value) {
+    case 'info':
+    case 'warning':
+    case 'error':
+      return value;
+    default:
+      return 'info';
+  }
+};
+
+const callTypeFromUnknown = (value: unknown): ServiceCallType => {
+  switch (value) {
+    case 'sync':
+    case 'async':
+      return value;
+    default:
+      return 'sync';
+  }
+};
+
+const draftFromParamDefinition = (
+  identifier: string,
+  definition: unknown,
+): ParamDraftRow => {
+  const body = isPlainObject(definition) ? definition : {};
+  const spec = isPlainObject(body.spec) ? body.spec : {};
+  return {
+    localId: createLocalId(),
+    identifier,
+    name: stringFromUnknown(body.name),
+    dataType: dataTypeFromUnknown(body.data_type),
+    required: boolFromUnknown(body.required),
+    min: spec.min === undefined ? '' : String(spec.min),
+    max: spec.max === undefined ? '' : String(spec.max),
+    step: spec.step === undefined ? '' : String(spec.step),
+    unit: stringFromUnknown(spec.unit),
+    precision: spec.precision === undefined ? '' : String(spec.precision),
+  };
+};
+
+const propertyRowsFromObject = (
+  value: ThingsModelObject,
+): PropertyDraftRow[] => {
+  return Object.entries(value ?? {}).map(([identifier, definition]) => {
+    const param = draftFromParamDefinition(identifier, definition);
+    const body = isPlainObject(definition) ? definition : {};
+    return {
+      ...param,
+      accessMode: accessModeFromUnknown(body.access_mode),
+    };
+  });
+};
+
+const eventRowsFromObject = (value: ThingsModelObject): EventDraftRow[] => {
+  return Object.entries(value ?? {}).map(([identifier, definition]) => {
+    const body = isPlainObject(definition) ? definition : {};
+    const output = isPlainObject(body.output) ? body.output : {};
+    return createEventDraftRow(
+      {
+        identifier,
+        name: stringFromUnknown(body.name),
+        desc: stringFromUnknown(body.desc),
+        level: eventLevelFromUnknown(body.level),
+      },
+      Object.entries(output).map(([paramIdentifier, paramDefinition]) =>
+        draftFromParamDefinition(paramIdentifier, paramDefinition),
+      ),
+    );
+  });
+};
+
+const serviceRowsFromObject = (value: ThingsModelObject): ServiceDraftRow[] => {
+  return Object.entries(value ?? {}).map(([identifier, definition]) => {
+    const body = isPlainObject(definition) ? definition : {};
+    const input = isPlainObject(body.input) ? body.input : {};
+    const output = isPlainObject(body.output) ? body.output : {};
+    return createServiceDraftRow(
+      {
+        identifier,
+        name: stringFromUnknown(body.name),
+        desc: stringFromUnknown(body.desc),
+        callType: callTypeFromUnknown(body.call_type),
+      },
+      Object.entries(input).map(([paramIdentifier, paramDefinition]) =>
+        draftFromParamDefinition(paramIdentifier, paramDefinition),
+      ),
+      Object.entries(output).map(([paramIdentifier, paramDefinition]) =>
+        draftFromParamDefinition(paramIdentifier, paramDefinition),
+      ),
+    );
+  });
+};
+
 const paramSpecFromDraft = (draft: ParamDraft): ThingsModelObject => {
   const spec: ThingsModelObject = {};
   const min = numberOrUndefined(draft.min);
@@ -289,11 +457,102 @@ const paramDefinitionFromDraft = (draft: ParamDraft): ThingsModelObject => {
   return definition;
 };
 
-const propertyDefinitionFromDraft = (draft: PropertyDraft): ThingsModelObject => {
+const propertyDefinitionFromDraft = (
+  draft: PropertyDraft,
+): ThingsModelObject => {
   return {
     ...paramDefinitionFromDraft(draft),
     access_mode: draft.accessMode,
   };
+};
+
+const objectFromPropertyRows = (
+  rows: PropertyDraftRow[],
+): ThingsModelObject => {
+  return rows.reduce<ThingsModelObject>((result, row) => {
+    const identifier = row.identifier.trim();
+    if (!identifier) {
+      return result;
+    }
+    result[identifier] = propertyDefinitionFromDraft(row);
+    return result;
+  }, {});
+};
+
+const objectFromEventRows = (rows: EventDraftRow[]): ThingsModelObject => {
+  return rows.reduce<ThingsModelObject>((result, row) => {
+    const identifier = row.identifier.trim();
+    if (!identifier) {
+      return result;
+    }
+    const output = row.outputParams.reduce<ThingsModelObject>(
+      (outputResult, param) => {
+        const paramIdentifier = param.identifier.trim();
+        if (!paramIdentifier) {
+          return outputResult;
+        }
+        outputResult[paramIdentifier] = paramDefinitionFromDraft(param);
+        return outputResult;
+      },
+      {},
+    );
+    result[identifier] = {
+      name: row.name.trim(),
+      level: row.level,
+      desc: row.desc.trim(),
+      output,
+    };
+    return result;
+  }, {});
+};
+
+const objectFromServiceRows = (rows: ServiceDraftRow[]): ThingsModelObject => {
+  return rows.reduce<ThingsModelObject>((result, row) => {
+    const identifier = row.identifier.trim();
+    if (!identifier) {
+      return result;
+    }
+    const input = row.inputParams.reduce<ThingsModelObject>(
+      (inputResult, param) => {
+        const paramIdentifier = param.identifier.trim();
+        if (!paramIdentifier) {
+          return inputResult;
+        }
+        inputResult[paramIdentifier] = paramDefinitionFromDraft(param);
+        return inputResult;
+      },
+      {},
+    );
+    const output = row.outputParams.reduce<ThingsModelObject>(
+      (outputResult, param) => {
+        const paramIdentifier = param.identifier.trim();
+        if (!paramIdentifier) {
+          return outputResult;
+        }
+        outputResult[paramIdentifier] = paramDefinitionFromDraft(param);
+        return outputResult;
+      },
+      {},
+    );
+    result[identifier] = {
+      name: row.name.trim(),
+      call_type: row.callType,
+      desc: row.desc.trim(),
+      input,
+      output,
+    };
+    return result;
+  }, {});
+};
+
+const safeDefinitionPreview = (build: () => ThingsModelObject) => {
+  try {
+    return stringifyObject(build());
+  } catch (error) {
+    return stringifyObject({
+      error: error instanceof Error ? error.message : 'invalid definition',
+    });
+  }
 };
 
 const mergeEventDefinition = (
@@ -587,29 +846,24 @@ const DefinitionPresetBar = ({
 interface JSONPreviewFieldProps {
   label: string;
   value: string;
-  onChange: (value: string) => void;
 }
 
-const JSONPreviewField = ({
-  label,
-  value,
-  onChange,
-}: JSONPreviewFieldProps) => {
+const JSONPreviewField = ({ label, value }: JSONPreviewFieldProps) => {
   return (
-    <label className="group grid overflow-hidden rounded-lg border border-linkflow-border bg-slate-50/70 text-sm font-bold shadow-sm ring-1 ring-slate-950/5 transition focus-within:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-slate-950/30 dark:ring-white/5 dark:focus-within:border-linkflow-dark-primary">
+    <label className="group grid overflow-hidden rounded-lg border border-linkflow-border bg-slate-50/70 text-sm font-bold shadow-sm ring-1 ring-slate-950/5 transition dark:border-linkflow-dark-border dark:bg-slate-950/30 dark:ring-white/5">
       <span className="flex min-h-10 items-center justify-between gap-3 border-b border-linkflow-border bg-white/80 px-3 py-2 dark:border-linkflow-dark-border dark:bg-linkflow-dark-page/80">
         <span>{label}</span>
         <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-wide text-linkflow-subtle dark:bg-slate-800 dark:text-linkflow-dark-subtle">
           JSON
         </span>
       </span>
-      <textarea
-        className="min-h-36 resize-y border-0 bg-transparent px-3 py-3 font-mono text-xs font-medium leading-5 text-linkflow-text outline-none transition placeholder:text-linkflow-subtle dark:text-linkflow-dark-text dark:placeholder:text-linkflow-dark-subtle"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        spellCheck={false}
-        required
-      />
+      <pre
+        className="m-0 max-h-60 min-h-36 overflow-auto whitespace-pre-wrap break-words border-0 bg-transparent px-3 py-3 font-mono text-xs font-medium leading-5 text-linkflow-text outline-none transition dark:text-linkflow-dark-text"
+        title={value}
+      >
+        {value}
+      </pre>
+      <textarea className="sr-only" value={value} readOnly required />
     </label>
   );
 };
@@ -836,22 +1090,20 @@ const ThingsModelManagement = () => {
   const [form, setForm] = useState<ThingsModelFormState>(emptyForm);
   const [activeDefinitionTab, setActiveDefinitionTab] =
     useState<ModelDefinitionTab>('properties');
-  const [propertyDraft, setPropertyDraft] =
-    useState<PropertyDraft>(emptyPropertyDraft);
-  const [eventDraft, setEventDraft] = useState<EventDraft>(emptyEventDraft);
-  const [eventOutputParams, setEventOutputParams] = useState<ParamDraftRow[]>(
-    [],
-  );
-  const [serviceDraft, setServiceDraft] =
-    useState<ServiceDraft>(emptyServiceDraft);
-  const [serviceInputParams, setServiceInputParams] = useState<ParamDraftRow[]>(
-    [],
-  );
-  const [serviceOutputParams, setServiceOutputParams] = useState<
-    ParamDraftRow[]
-  >([]);
+  const [propertyRows, setPropertyRows] = useState<PropertyDraftRow[]>([]);
+  const [eventRows, setEventRows] = useState<EventDraftRow[]>([]);
+  const [serviceRows, setServiceRows] = useState<ServiceDraftRow[]>([]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const propertyDefinitionsText = safeDefinitionPreview(() =>
+    objectFromPropertyRows(propertyRows),
+  );
+  const eventDefinitionsText = safeDefinitionPreview(() =>
+    objectFromEventRows(eventRows),
+  );
+  const serviceDefinitionsText = safeDefinitionPreview(() =>
+    objectFromServiceRows(serviceRows),
+  );
   const productNameById = new Map(
     products.map((product) => [product.id, product.product_name]),
   );
@@ -1014,93 +1266,183 @@ const ThingsModelManagement = () => {
     setForm((current) => ({ ...current, [key]: value }));
   };
 
-  const updatePropertyDraft = <K extends keyof PropertyDraft>(
+  const updatePropertyRow = <K extends keyof PropertyDraft>(
+    localId: string,
     key: K,
     value: PropertyDraft[K],
   ) => {
-    setPropertyDraft((current) => ({ ...current, [key]: value }));
+    setPropertyRows((current) =>
+      current.map((row) =>
+        row.localId === localId ? { ...row, [key]: value } : row,
+      ),
+    );
   };
 
-  const updateEventDraft = <K extends keyof EventDraft>(
+  const updateEventRow = <K extends keyof EventDraft>(
+    localId: string,
     key: K,
     value: EventDraft[K],
   ) => {
-    setEventDraft((current) => ({ ...current, [key]: value }));
+    setEventRows((current) =>
+      current.map((row) =>
+        row.localId === localId ? { ...row, [key]: value } : row,
+      ),
+    );
   };
-  const addEventOutputParam = () => {
-    setEventOutputParams((current) => [...current, createParamDraftRow()]);
+  const addEventOutputParam = (eventLocalId: string) => {
+    setEventRows((current) =>
+      current.map((row) =>
+        row.localId === eventLocalId
+          ? {
+              ...row,
+              outputParams: [...row.outputParams, createParamDraftRow()],
+            }
+          : row,
+      ),
+    );
   };
   const updateEventOutputParam = <K extends keyof ParamDraft>(
+    eventLocalId: string,
     localId: string,
     key: K,
     value: ParamDraft[K],
   ) => {
-    setEventOutputParams((current) =>
-      current.map((param) =>
-        param.localId === localId ? { ...param, [key]: value } : param,
+    setEventRows((current) =>
+      current.map((row) =>
+        row.localId === eventLocalId
+          ? {
+              ...row,
+              outputParams: row.outputParams.map((param) =>
+                param.localId === localId ? { ...param, [key]: value } : param,
+              ),
+            }
+          : row,
       ),
     );
   };
-  const removeEventOutputParam = (localId: string) => {
-    setEventOutputParams((current) =>
-      current.filter((param) => param.localId !== localId),
+  const removeEventOutputParam = (eventLocalId: string, localId: string) => {
+    setEventRows((current) =>
+      current.map((row) =>
+        row.localId === eventLocalId
+          ? {
+              ...row,
+              outputParams: row.outputParams.filter(
+                (param) => param.localId !== localId,
+              ),
+            }
+          : row,
+      ),
     );
   };
 
-  const updateServiceDraft = <K extends keyof ServiceDraft>(
+  const updateServiceRow = <K extends keyof ServiceDraft>(
+    localId: string,
     key: K,
     value: ServiceDraft[K],
   ) => {
-    setServiceDraft((current) => ({ ...current, [key]: value }));
+    setServiceRows((current) =>
+      current.map((row) =>
+        row.localId === localId ? { ...row, [key]: value } : row,
+      ),
+    );
   };
-  const addServiceInputParam = () => {
-    setServiceInputParams((current) => [...current, createParamDraftRow()]);
+  const addServiceInputParam = (serviceLocalId: string) => {
+    setServiceRows((current) =>
+      current.map((row) =>
+        row.localId === serviceLocalId
+          ? { ...row, inputParams: [...row.inputParams, createParamDraftRow()] }
+          : row,
+      ),
+    );
   };
   const updateServiceInputParam = <K extends keyof ParamDraft>(
+    serviceLocalId: string,
     localId: string,
     key: K,
     value: ParamDraft[K],
   ) => {
-    setServiceInputParams((current) =>
-      current.map((param) =>
-        param.localId === localId ? { ...param, [key]: value } : param,
+    setServiceRows((current) =>
+      current.map((row) =>
+        row.localId === serviceLocalId
+          ? {
+              ...row,
+              inputParams: row.inputParams.map((param) =>
+                param.localId === localId ? { ...param, [key]: value } : param,
+              ),
+            }
+          : row,
       ),
     );
   };
-  const removeServiceInputParam = (localId: string) => {
-    setServiceInputParams((current) =>
-      current.filter((param) => param.localId !== localId),
+  const removeServiceInputParam = (serviceLocalId: string, localId: string) => {
+    setServiceRows((current) =>
+      current.map((row) =>
+        row.localId === serviceLocalId
+          ? {
+              ...row,
+              inputParams: row.inputParams.filter(
+                (param) => param.localId !== localId,
+              ),
+            }
+          : row,
+      ),
     );
   };
-  const addServiceOutputParam = () => {
-    setServiceOutputParams((current) => [...current, createParamDraftRow()]);
+  const addServiceOutputParam = (serviceLocalId: string) => {
+    setServiceRows((current) =>
+      current.map((row) =>
+        row.localId === serviceLocalId
+          ? {
+              ...row,
+              outputParams: [...row.outputParams, createParamDraftRow()],
+            }
+          : row,
+      ),
+    );
   };
   const updateServiceOutputParam = <K extends keyof ParamDraft>(
+    serviceLocalId: string,
     localId: string,
     key: K,
     value: ParamDraft[K],
   ) => {
-    setServiceOutputParams((current) =>
-      current.map((param) =>
-        param.localId === localId ? { ...param, [key]: value } : param,
+    setServiceRows((current) =>
+      current.map((row) =>
+        row.localId === serviceLocalId
+          ? {
+              ...row,
+              outputParams: row.outputParams.map((param) =>
+                param.localId === localId ? { ...param, [key]: value } : param,
+              ),
+            }
+          : row,
       ),
     );
   };
-  const removeServiceOutputParam = (localId: string) => {
-    setServiceOutputParams((current) =>
-      current.filter((param) => param.localId !== localId),
+  const removeServiceOutputParam = (
+    serviceLocalId: string,
+    localId: string,
+  ) => {
+    setServiceRows((current) =>
+      current.map((row) =>
+        row.localId === serviceLocalId
+          ? {
+              ...row,
+              outputParams: row.outputParams.filter(
+                (param) => param.localId !== localId,
+              ),
+            }
+          : row,
+      ),
     );
   };
 
   const openCreateForm = () => {
     setEditingModel(null);
     setActiveDefinitionTab('properties');
-    setPropertyDraft(emptyPropertyDraft);
-    setEventDraft(emptyEventDraft);
-    setEventOutputParams([]);
-    setServiceDraft(emptyServiceDraft);
-    setServiceInputParams([]);
-    setServiceOutputParams([]);
+    setPropertyRows([createPropertyDraftRow()]);
+    setEventRows([createEventDraftRow()]);
+    setServiceRows([createServiceDraftRow()]);
     setForm({
       ...emptyForm,
       product_id: productFilter || products[0]?.id || '',
@@ -1111,12 +1453,9 @@ const ThingsModelManagement = () => {
   const openEditForm = (model: ThingsModel) => {
     setEditingModel(model);
     setActiveDefinitionTab('properties');
-    setPropertyDraft(emptyPropertyDraft);
-    setEventDraft(emptyEventDraft);
-    setEventOutputParams([]);
-    setServiceDraft(emptyServiceDraft);
-    setServiceInputParams([]);
-    setServiceOutputParams([]);
+    setPropertyRows(propertyRowsFromObject(model.properties));
+    setEventRows(eventRowsFromObject(model.events));
+    setServiceRows(serviceRowsFromObject(model.services));
     setForm(toFormState(model));
     setFormMode('edit');
   };
@@ -1125,12 +1464,9 @@ const ThingsModelManagement = () => {
     setFormMode(null);
     setEditingModel(null);
     setActiveDefinitionTab('properties');
-    setPropertyDraft(emptyPropertyDraft);
-    setEventDraft(emptyEventDraft);
-    setEventOutputParams([]);
-    setServiceDraft(emptyServiceDraft);
-    setServiceInputParams([]);
-    setServiceOutputParams([]);
+    setPropertyRows([]);
+    setEventRows([]);
+    setServiceRows([]);
     setForm(emptyForm);
   };
 
@@ -1155,132 +1491,74 @@ const ThingsModelManagement = () => {
     );
   };
 
+  const validateDefinitionRows = () => {
+    return (
+      propertyRows.every(
+        (row) => row.identifier.trim() !== '' && row.name.trim() !== '',
+      ) &&
+      eventRows.every(
+        (row) =>
+          row.identifier.trim() !== '' &&
+          row.name.trim() !== '' &&
+          validateParamRows(row.outputParams),
+      ) &&
+      serviceRows.every(
+        (row) =>
+          row.identifier.trim() !== '' &&
+          row.name.trim() !== '' &&
+          validateParamRows(row.inputParams) &&
+          validateParamRows(row.outputParams),
+      )
+    );
+  };
+
   const handleApplyPreset = (
     field: DefinitionField,
     template: ThingsModelObject,
   ) => {
-    try {
-      updateFormField(field, mergeObjectTemplate(form[field], template));
-    } catch (error) {
-      notification.error({
-        message: t('adminThingsModelJSONInvalid'),
-        description: error instanceof Error ? error.message : undefined,
-        placement: 'topRight',
-      });
+    if (field === 'properties') {
+      setPropertyRows((current) => [
+        ...current,
+        ...propertyRowsFromObject(template),
+      ]);
+      return;
     }
+    if (field === 'events') {
+      setEventRows((current) => [...current, ...eventRowsFromObject(template)]);
+      return;
+    }
+    setServiceRows((current) => [
+      ...current,
+      ...serviceRowsFromObject(template),
+    ]);
   };
 
   const handleAddProperty = () => {
-    const identifier = propertyDraft.identifier.trim();
-    const name = propertyDraft.name.trim();
-    if (!identifier || !name) {
-      notification.warning({
-        message: t('adminThingsModelDefinitionRequired'),
-        placement: 'topRight',
-      });
-      return;
-    }
+    setPropertyRows((current) => [...current, createPropertyDraftRow()]);
+  };
 
-    try {
-      updateFormField(
-        'properties',
-        setObjectEntry(
-          form.properties,
-          identifier,
-          propertyDefinitionFromDraft(propertyDraft),
-        ),
-      );
-      setPropertyDraft(emptyPropertyDraft);
-    } catch (error) {
-      notification.error({
-        message: t('adminThingsModelJSONInvalid'),
-        description: error instanceof Error ? error.message : undefined,
-        placement: 'topRight',
-      });
-    }
+  const handleRemoveProperty = (localId: string) => {
+    setPropertyRows((current) =>
+      current.filter((row) => row.localId !== localId),
+    );
   };
 
   const handleAddEvent = () => {
-    const identifier = eventDraft.identifier.trim();
-    const name = eventDraft.name.trim();
-    if (!identifier || !name) {
-      notification.warning({
-        message: t('adminThingsModelDefinitionRequired'),
-        placement: 'topRight',
-      });
-      return;
-    }
-    if (!validateParamRows(eventOutputParams)) {
-      notification.warning({
-        message: t('adminThingsModelParamRequired'),
-        placement: 'topRight',
-      });
-      return;
-    }
+    setEventRows((current) => [...current, createEventDraftRow()]);
+  };
 
-    try {
-      updateFormField(
-        'events',
-        mergeEventDefinition(
-          form.events,
-          identifier,
-          eventDraft,
-          eventOutputParams,
-        ),
-      );
-      setEventDraft(emptyEventDraft);
-      setEventOutputParams([]);
-    } catch (error) {
-      notification.error({
-        message: t('adminThingsModelJSONInvalid'),
-        description: error instanceof Error ? error.message : undefined,
-        placement: 'topRight',
-      });
-    }
+  const handleRemoveEvent = (localId: string) => {
+    setEventRows((current) => current.filter((row) => row.localId !== localId));
   };
 
   const handleAddService = () => {
-    const identifier = serviceDraft.identifier.trim();
-    const name = serviceDraft.name.trim();
-    if (!identifier || !name) {
-      notification.warning({
-        message: t('adminThingsModelDefinitionRequired'),
-        placement: 'topRight',
-      });
-      return;
-    }
-    if (
-      !validateParamRows(serviceInputParams) ||
-      !validateParamRows(serviceOutputParams)
-    ) {
-      notification.warning({
-        message: t('adminThingsModelParamRequired'),
-        placement: 'topRight',
-      });
-      return;
-    }
+    setServiceRows((current) => [...current, createServiceDraftRow()]);
+  };
 
-    try {
-      updateFormField(
-        'services',
-        mergeServiceDefinition(
-          form.services,
-          identifier,
-          serviceDraft,
-          serviceInputParams,
-          serviceOutputParams,
-        ),
-      );
-      setServiceDraft(emptyServiceDraft);
-      setServiceInputParams([]);
-      setServiceOutputParams([]);
-    } catch (error) {
-      notification.error({
-        message: t('adminThingsModelJSONInvalid'),
-        description: error instanceof Error ? error.message : undefined,
-        placement: 'topRight',
-      });
-    }
+  const handleRemoveService = (localId: string) => {
+    setServiceRows((current) =>
+      current.filter((row) => row.localId !== localId),
+    );
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -1289,11 +1567,19 @@ const ThingsModelManagement = () => {
       return;
     }
 
+    if (!validateDefinitionRows()) {
+      notification.warning({
+        message: t('adminThingsModelDefinitionRequired'),
+        placement: 'topRight',
+      });
+      return;
+    }
+
     setSaving(true);
     try {
-      const properties = parseObjectField(form.properties);
-      const events = parseObjectField(form.events);
-      const services = parseObjectField(form.services);
+      const properties = objectFromPropertyRows(propertyRows);
+      const events = objectFromEventRows(eventRows);
+      const services = objectFromServiceRows(serviceRows);
 
       if (formMode === 'create') {
         await createThingsModel({
@@ -1737,174 +2023,225 @@ const ThingsModelManagement = () => {
                     <p className="m-0 rounded-md border border-linkflow-primary/20 bg-linkflow-primary-soft px-3 py-1.5 text-sm leading-5 text-linkflow-primary">
                       {t('adminThingsModelPropertiesTip')}
                     </p>
-                    <div className="grid gap-3 rounded-lg border border-linkflow-primary/25 bg-white/75 p-3 shadow-sm ring-1 ring-linkflow-primary/10 dark:border-linkflow-dark-primary/25 dark:bg-linkflow-dark-page/40 dark:ring-linkflow-dark-primary/10 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelIdentifier')}
-                        <input
-                          className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          value={propertyDraft.identifier}
-                          onChange={(event) =>
-                            updatePropertyDraft(
-                              'identifier',
-                              event.target.value,
-                            )
-                          }
-                          placeholder="temperature"
-                        />
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelDisplayName')}
-                        <input
-                          className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          value={propertyDraft.name}
-                          onChange={(event) =>
-                            updatePropertyDraft('name', event.target.value)
-                          }
-                          placeholder={t('adminThingsModelPropertyNameExample')}
-                        />
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelDataType')}
-                        <select
-                          className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          value={propertyDraft.dataType}
-                          onChange={(event) =>
-                            updatePropertyDraft(
-                              'dataType',
-                              event.target.value as PropertyDataType,
-                            )
-                          }
-                        >
-                          <option value="string">string</option>
-                          <option value="int">int</option>
-                          <option value="float">float</option>
-                          <option value="double">double</option>
-                          <option value="bool">bool</option>
-                        </select>
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelAccessMode')}
-                        <select
-                          className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          value={propertyDraft.accessMode}
-                          onChange={(event) =>
-                            updatePropertyDraft(
-                              'accessMode',
-                              event.target.value as PropertyAccessMode,
-                            )
-                          }
-                        >
-                          <option value="read">
-                            {t('adminThingsModelAccessRead')}
-                          </option>
-                          <option value="write">
-                            {t('adminThingsModelAccessWrite')}
-                          </option>
-                          <option value="readwrite">
-                            {t('adminThingsModelAccessReadWrite')}
-                          </option>
-                        </select>
-                      </label>
-                      <label className="inline-flex h-10 w-fit self-end items-center gap-2 rounded-full border border-linkflow-border bg-slate-50 px-3 text-sm font-bold text-linkflow-muted dark:border-linkflow-dark-border dark:bg-slate-900/40 dark:text-linkflow-dark-muted">
-                        <input
-                          className="h-4 w-4"
-                          type="checkbox"
-                          checked={propertyDraft.required}
-                          onChange={(event) =>
-                            updatePropertyDraft(
-                              'required',
-                              event.target.checked,
-                            )
-                          }
-                        />
-                        {t('adminThingsModelRequired')}
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelSpecMin')}
-                        <input
-                          className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          inputMode="decimal"
-                          value={propertyDraft.min}
-                          onChange={(event) =>
-                            updatePropertyDraft('min', event.target.value)
-                          }
-                          placeholder="-40"
-                        />
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelSpecMax')}
-                        <input
-                          className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          inputMode="decimal"
-                          value={propertyDraft.max}
-                          onChange={(event) =>
-                            updatePropertyDraft('max', event.target.value)
-                          }
-                          placeholder="125"
-                        />
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelSpecStep')}
-                        <input
-                          className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          inputMode="decimal"
-                          value={propertyDraft.step}
-                          onChange={(event) =>
-                            updatePropertyDraft('step', event.target.value)
-                          }
-                          placeholder="0.1"
-                        />
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelSpecUnit')}
-                        <input
-                          className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          value={propertyDraft.unit}
-                          onChange={(event) =>
-                            updatePropertyDraft('unit', event.target.value)
-                          }
-                          placeholder="celsius"
-                        />
-                      </label>
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelSpecPrecision')}
-                        <input
-                          className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          inputMode="numeric"
-                          value={propertyDraft.precision}
-                          onChange={(event) =>
-                            updatePropertyDraft(
-                              'precision',
-                              event.target.value,
-                            )
-                          }
-                          placeholder="1"
-                        />
-                      </label>
-                      <div className="flex items-end">
-                        <button
-                          type="button"
-                          className="inline-flex h-10 items-center gap-2 rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
-                          onClick={handleAddProperty}
-                        >
-                          <PlusOutlined aria-hidden="true" />
-                          {t('adminThingsModelAddDefinition')}
-                        </button>
-                      </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <DefinitionPresetBar
+                        onApply={(template) =>
+                          handleApplyPreset('properties', template)
+                        }
+                        presets={propertyPresets}
+                        title={t('adminThingsModelCommonPresets')}
+                      />
+                      <button
+                        type="button"
+                        className="inline-flex h-10 items-center gap-2 rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
+                        onClick={handleAddProperty}
+                      >
+                        <PlusOutlined aria-hidden="true" />
+                        {t('adminThingsModelAddProperty')}
+                      </button>
                     </div>
-                    <DefinitionPresetBar
-                      onApply={(template) =>
-                        handleApplyPreset('properties', template)
-                      }
-                      presets={propertyPresets}
-                      title={t('adminThingsModelCommonPresets')}
-                    />
+                    <div className="grid gap-3">
+                      {propertyRows.map((property, index) => (
+                        <section
+                          key={property.localId}
+                          className="grid gap-3 rounded-lg border border-linkflow-primary/25 bg-white/75 p-3 shadow-sm ring-1 ring-linkflow-primary/10 dark:border-linkflow-dark-primary/25 dark:bg-linkflow-dark-page/40 dark:ring-linkflow-dark-primary/10"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h4 className="m-0 text-sm font-black text-linkflow-primary dark:text-linkflow-dark-primary">
+                              {property.identifier.trim() ||
+                                `${t('adminThingsModelPropertiesTab')} #${
+                                  index + 1
+                                }`}
+                            </h4>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 items-center gap-1 rounded-md border border-rose-200 bg-white px-2 text-xs font-bold text-rose-600 transition hover:bg-rose-50 dark:border-rose-900/70 dark:bg-linkflow-dark-panel dark:text-rose-300 dark:hover:bg-rose-950/30"
+                              onClick={() =>
+                                handleRemoveProperty(property.localId)
+                              }
+                            >
+                              <DeleteOutlined aria-hidden="true" />
+                              {t('adminThingsModelRemoveDefinition')}
+                            </button>
+                          </div>
+                          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelIdentifier')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={property.identifier}
+                                onChange={(event) =>
+                                  updatePropertyRow(
+                                    property.localId,
+                                    'identifier',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="temperature"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelDisplayName')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={property.name}
+                                onChange={(event) =>
+                                  updatePropertyRow(
+                                    property.localId,
+                                    'name',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder={t(
+                                  'adminThingsModelPropertyNameExample',
+                                )}
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelDataType')}
+                              <select
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={property.dataType}
+                                onChange={(event) =>
+                                  updatePropertyRow(
+                                    property.localId,
+                                    'dataType',
+                                    event.target.value as PropertyDataType,
+                                  )
+                                }
+                              >
+                                <option value="string">string</option>
+                                <option value="int">int</option>
+                                <option value="float">float</option>
+                                <option value="double">double</option>
+                                <option value="bool">bool</option>
+                              </select>
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelAccessMode')}
+                              <select
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={property.accessMode}
+                                onChange={(event) =>
+                                  updatePropertyRow(
+                                    property.localId,
+                                    'accessMode',
+                                    event.target.value as PropertyAccessMode,
+                                  )
+                                }
+                              >
+                                <option value="read">
+                                  {t('adminThingsModelAccessRead')}
+                                </option>
+                                <option value="write">
+                                  {t('adminThingsModelAccessWrite')}
+                                </option>
+                                <option value="readwrite">
+                                  {t('adminThingsModelAccessReadWrite')}
+                                </option>
+                              </select>
+                            </label>
+                            <label className="inline-flex h-10 w-fit self-end items-center gap-2 rounded-full border border-linkflow-border bg-slate-50 px-3 text-sm font-bold text-linkflow-muted dark:border-linkflow-dark-border dark:bg-slate-900/40 dark:text-linkflow-dark-muted">
+                              <input
+                                className="h-4 w-4"
+                                type="checkbox"
+                                checked={property.required}
+                                onChange={(event) =>
+                                  updatePropertyRow(
+                                    property.localId,
+                                    'required',
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              {t('adminThingsModelRequired')}
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelSpecMin')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                inputMode="decimal"
+                                value={property.min}
+                                onChange={(event) =>
+                                  updatePropertyRow(
+                                    property.localId,
+                                    'min',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="-40"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelSpecMax')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                inputMode="decimal"
+                                value={property.max}
+                                onChange={(event) =>
+                                  updatePropertyRow(
+                                    property.localId,
+                                    'max',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="125"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelSpecStep')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                inputMode="decimal"
+                                value={property.step}
+                                onChange={(event) =>
+                                  updatePropertyRow(
+                                    property.localId,
+                                    'step',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="0.1"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelSpecUnit')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={property.unit}
+                                onChange={(event) =>
+                                  updatePropertyRow(
+                                    property.localId,
+                                    'unit',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="celsius"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelSpecPrecision')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                inputMode="numeric"
+                                value={property.precision}
+                                onChange={(event) =>
+                                  updatePropertyRow(
+                                    property.localId,
+                                    'precision',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="1"
+                              />
+                            </label>
+                          </div>
+                        </section>
+                      ))}
+                    </div>
                     <JSONPreviewField
                       label={t('adminThingsModelJSONPreview')}
-                      value={form.properties}
-                      onChange={(value) =>
-                        updateFormField('properties', value)
-                      }
+                      value={propertyDefinitionsText}
                     />
                   </div>
                 ) : null}
@@ -1914,90 +2251,141 @@ const ThingsModelManagement = () => {
                     <p className="m-0 rounded-md border border-linkflow-primary/20 bg-linkflow-primary-soft px-3 py-1.5 text-sm leading-5 text-linkflow-primary">
                       {t('adminThingsModelEventsTip')}
                     </p>
-                    <div className="grid gap-3 rounded-lg border border-linkflow-primary/25 bg-white/75 p-3 shadow-sm ring-1 ring-linkflow-primary/10 dark:border-linkflow-dark-primary/25 dark:bg-linkflow-dark-page/40 dark:ring-linkflow-dark-primary/10">
-                      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-                        <label className="grid gap-1.5 text-sm font-bold">
-                          {t('adminThingsModelIdentifier')}
-                          <input
-                            className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                            value={eventDraft.identifier}
-                            onChange={(event) =>
-                              updateEventDraft(
-                                'identifier',
-                                event.target.value,
-                              )
-                            }
-                            placeholder="temperature_alarm"
-                          />
-                        </label>
-                        <label className="grid gap-1.5 text-sm font-bold">
-                          {t('adminThingsModelDisplayName')}
-                          <input
-                            className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                            value={eventDraft.name}
-                            onChange={(event) =>
-                              updateEventDraft('name', event.target.value)
-                            }
-                            placeholder={t('adminThingsModelEventNameExample')}
-                          />
-                        </label>
-                        <label className="grid gap-1.5 text-sm font-bold">
-                          {t('adminThingsModelEventLevel')}
-                          <select
-                            className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                            value={eventDraft.level}
-                            onChange={(event) =>
-                              updateEventDraft(
-                                'level',
-                                event.target.value as EventLevel,
-                              )
-                            }
-                          >
-                            <option value="info">info</option>
-                            <option value="warning">warning</option>
-                            <option value="error">error</option>
-                          </select>
-                        </label>
-                        <div className="flex items-end">
-                          <button
-                            type="button"
-                            className="inline-flex h-10 items-center gap-2 rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
-                            onClick={handleAddEvent}
-                          >
-                            <PlusOutlined aria-hidden="true" />
-                            {t('adminThingsModelAddEvent')}
-                          </button>
-                        </div>
-                      </div>
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelDescriptionField')}
-                        <textarea
-                          className="min-h-20 resize-y rounded-md border border-linkflow-border bg-white px-3 py-2 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          value={eventDraft.desc}
-                          onChange={(event) =>
-                            updateEventDraft('desc', event.target.value)
-                          }
-                          placeholder={t('adminThingsModelEventDescExample')}
-                        />
-                      </label>
-                      <ParamDraftList
-                        addLabel={t('adminThingsModelNewParam')}
-                        onAddRow={addEventOutputParam}
-                        onChangeRow={updateEventOutputParam}
-                        onRemoveRow={removeEventOutputParam}
-                        rows={eventOutputParams}
-                        title={t('adminThingsModelEventOutput')}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <DefinitionPresetBar
+                        onApply={(template) =>
+                          handleApplyPreset('events', template)
+                        }
+                        presets={eventPresets}
+                        title={t('adminThingsModelCommonPresets')}
                       />
+                      <button
+                        type="button"
+                        className="inline-flex h-10 items-center gap-2 rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
+                        onClick={handleAddEvent}
+                      >
+                        <PlusOutlined aria-hidden="true" />
+                        {t('adminThingsModelAddEvent')}
+                      </button>
                     </div>
-                    <DefinitionPresetBar
-                      onApply={(template) => handleApplyPreset('events', template)}
-                      presets={eventPresets}
-                      title={t('adminThingsModelCommonPresets')}
-                    />
+                    <div className="grid gap-3">
+                      {eventRows.map((eventRow, index) => (
+                        <section
+                          key={eventRow.localId}
+                          className="grid gap-3 rounded-lg border border-linkflow-primary/25 bg-white/75 p-3 shadow-sm ring-1 ring-linkflow-primary/10 dark:border-linkflow-dark-primary/25 dark:bg-linkflow-dark-page/40 dark:ring-linkflow-dark-primary/10"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h4 className="m-0 text-sm font-black text-linkflow-primary dark:text-linkflow-dark-primary">
+                              {eventRow.identifier.trim() ||
+                                `${t('adminThingsModelEventsTab')} #${
+                                  index + 1
+                                }`}
+                            </h4>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 items-center gap-1 rounded-md border border-rose-200 bg-white px-2 text-xs font-bold text-rose-600 transition hover:bg-rose-50 dark:border-rose-900/70 dark:bg-linkflow-dark-panel dark:text-rose-300 dark:hover:bg-rose-950/30"
+                              onClick={() =>
+                                handleRemoveEvent(eventRow.localId)
+                              }
+                            >
+                              <DeleteOutlined aria-hidden="true" />
+                              {t('adminThingsModelRemoveDefinition')}
+                            </button>
+                          </div>
+                          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelIdentifier')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={eventRow.identifier}
+                                onChange={(event) =>
+                                  updateEventRow(
+                                    eventRow.localId,
+                                    'identifier',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="temperature_alarm"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelDisplayName')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={eventRow.name}
+                                onChange={(event) =>
+                                  updateEventRow(
+                                    eventRow.localId,
+                                    'name',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder={t(
+                                  'adminThingsModelEventNameExample',
+                                )}
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelEventLevel')}
+                              <select
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={eventRow.level}
+                                onChange={(event) =>
+                                  updateEventRow(
+                                    eventRow.localId,
+                                    'level',
+                                    event.target.value as EventLevel,
+                                  )
+                                }
+                              >
+                                <option value="info">info</option>
+                                <option value="warning">warning</option>
+                                <option value="error">error</option>
+                              </select>
+                            </label>
+                          </div>
+                          <label className="grid gap-1.5 text-sm font-bold">
+                            {t('adminThingsModelDescriptionField')}
+                            <textarea
+                              className="min-h-20 resize-y rounded-md border border-linkflow-border bg-white px-3 py-2 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                              value={eventRow.desc}
+                              onChange={(event) =>
+                                updateEventRow(
+                                  eventRow.localId,
+                                  'desc',
+                                  event.target.value,
+                                )
+                              }
+                              placeholder={t(
+                                'adminThingsModelEventDescExample',
+                              )}
+                            />
+                          </label>
+                          <ParamDraftList
+                            addLabel={t('adminThingsModelNewParam')}
+                            onAddRow={() =>
+                              addEventOutputParam(eventRow.localId)
+                            }
+                            onChangeRow={(localId, key, value) =>
+                              updateEventOutputParam(
+                                eventRow.localId,
+                                localId,
+                                key,
+                                value,
+                              )
+                            }
+                            onRemoveRow={(localId) =>
+                              removeEventOutputParam(eventRow.localId, localId)
+                            }
+                            rows={eventRow.outputParams}
+                            title={t('adminThingsModelEventOutput')}
+                          />
+                        </section>
+                      ))}
+                    </div>
                     <JSONPreviewField
                       label={t('adminThingsModelJSONPreview')}
-                      value={form.events}
-                      onChange={(value) => updateFormField('events', value)}
+                      value={eventDefinitionsText}
                     />
                   </div>
                 ) : null}
@@ -2007,99 +2395,159 @@ const ThingsModelManagement = () => {
                     <p className="m-0 rounded-md border border-linkflow-primary/20 bg-linkflow-primary-soft px-3 py-1.5 text-sm leading-5 text-linkflow-primary">
                       {t('adminThingsModelServicesTip')}
                     </p>
-                    <div className="grid gap-3 rounded-lg border border-linkflow-primary/25 bg-white/75 p-3 shadow-sm ring-1 ring-linkflow-primary/10 dark:border-linkflow-dark-primary/25 dark:bg-linkflow-dark-page/40 dark:ring-linkflow-dark-primary/10">
-                      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
-                        <label className="grid gap-1.5 text-sm font-bold">
-                          {t('adminThingsModelIdentifier')}
-                          <input
-                            className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                            value={serviceDraft.identifier}
-                            onChange={(event) =>
-                              updateServiceDraft(
-                                'identifier',
-                                event.target.value,
-                              )
-                            }
-                            placeholder="reboot"
-                          />
-                        </label>
-                        <label className="grid gap-1.5 text-sm font-bold">
-                          {t('adminThingsModelDisplayName')}
-                          <input
-                            className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                            value={serviceDraft.name}
-                            onChange={(event) =>
-                              updateServiceDraft('name', event.target.value)
-                            }
-                            placeholder={t('adminThingsModelServiceNameExample')}
-                          />
-                        </label>
-                        <label className="grid gap-1.5 text-sm font-bold">
-                          {t('adminThingsModelCallType')}
-                          <select
-                            className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                            value={serviceDraft.callType}
-                            onChange={(event) =>
-                              updateServiceDraft(
-                                'callType',
-                                event.target.value as ServiceCallType,
-                              )
-                            }
-                          >
-                            <option value="sync">sync</option>
-                            <option value="async">async</option>
-                          </select>
-                        </label>
-                        <div className="flex items-end">
-                          <button
-                            type="button"
-                            className="inline-flex h-10 items-center gap-2 rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
-                            onClick={handleAddService}
-                          >
-                            <PlusOutlined aria-hidden="true" />
-                            {t('adminThingsModelAddService')}
-                          </button>
-                        </div>
-                      </div>
-                      <label className="grid gap-1.5 text-sm font-bold">
-                        {t('adminThingsModelDescriptionField')}
-                        <textarea
-                          className="min-h-20 resize-y rounded-md border border-linkflow-border bg-white px-3 py-2 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
-                          value={serviceDraft.desc}
-                          onChange={(event) =>
-                            updateServiceDraft('desc', event.target.value)
-                          }
-                          placeholder={t('adminThingsModelServiceDescExample')}
-                        />
-                      </label>
-                      <ParamDraftList
-                        addLabel={t('adminThingsModelNewParam')}
-                        onAddRow={addServiceInputParam}
-                        onChangeRow={updateServiceInputParam}
-                        onRemoveRow={removeServiceInputParam}
-                        rows={serviceInputParams}
-                        title={t('adminThingsModelServiceInput')}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <DefinitionPresetBar
+                        onApply={(template) =>
+                          handleApplyPreset('services', template)
+                        }
+                        presets={servicePresets}
+                        title={t('adminThingsModelCommonPresets')}
                       />
-                      <ParamDraftList
-                        addLabel={t('adminThingsModelNewParam')}
-                        onAddRow={addServiceOutputParam}
-                        onChangeRow={updateServiceOutputParam}
-                        onRemoveRow={removeServiceOutputParam}
-                        rows={serviceOutputParams}
-                        title={t('adminThingsModelServiceOutput')}
-                      />
+                      <button
+                        type="button"
+                        className="inline-flex h-10 items-center gap-2 rounded-md border border-linkflow-primary bg-white/70 px-3 text-sm font-bold text-linkflow-primary shadow-sm transition hover:bg-linkflow-primary-soft dark:border-linkflow-dark-primary dark:bg-linkflow-dark-panel/70 dark:text-linkflow-dark-primary dark:hover:bg-linkflow-dark-primary-soft"
+                        onClick={handleAddService}
+                      >
+                        <PlusOutlined aria-hidden="true" />
+                        {t('adminThingsModelAddService')}
+                      </button>
                     </div>
-                    <DefinitionPresetBar
-                      onApply={(template) =>
-                        handleApplyPreset('services', template)
-                      }
-                      presets={servicePresets}
-                      title={t('adminThingsModelCommonPresets')}
-                    />
+                    <div className="grid gap-3">
+                      {serviceRows.map((service, index) => (
+                        <section
+                          key={service.localId}
+                          className="grid gap-3 rounded-lg border border-linkflow-primary/25 bg-white/75 p-3 shadow-sm ring-1 ring-linkflow-primary/10 dark:border-linkflow-dark-primary/25 dark:bg-linkflow-dark-page/40 dark:ring-linkflow-dark-primary/10"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h4 className="m-0 text-sm font-black text-linkflow-primary dark:text-linkflow-dark-primary">
+                              {service.identifier.trim() ||
+                                `${t('adminThingsModelServicesTab')} #${
+                                  index + 1
+                                }`}
+                            </h4>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 items-center gap-1 rounded-md border border-rose-200 bg-white px-2 text-xs font-bold text-rose-600 transition hover:bg-rose-50 dark:border-rose-900/70 dark:bg-linkflow-dark-panel dark:text-rose-300 dark:hover:bg-rose-950/30"
+                              onClick={() =>
+                                handleRemoveService(service.localId)
+                              }
+                            >
+                              <DeleteOutlined aria-hidden="true" />
+                              {t('adminThingsModelRemoveDefinition')}
+                            </button>
+                          </div>
+                          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelIdentifier')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={service.identifier}
+                                onChange={(event) =>
+                                  updateServiceRow(
+                                    service.localId,
+                                    'identifier',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder="reboot"
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelDisplayName')}
+                              <input
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={service.name}
+                                onChange={(event) =>
+                                  updateServiceRow(
+                                    service.localId,
+                                    'name',
+                                    event.target.value,
+                                  )
+                                }
+                                placeholder={t(
+                                  'adminThingsModelServiceNameExample',
+                                )}
+                              />
+                            </label>
+                            <label className="grid gap-1.5 text-sm font-bold">
+                              {t('adminThingsModelCallType')}
+                              <select
+                                className="h-10 rounded-md border border-linkflow-border bg-white px-3 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                                value={service.callType}
+                                onChange={(event) =>
+                                  updateServiceRow(
+                                    service.localId,
+                                    'callType',
+                                    event.target.value as ServiceCallType,
+                                  )
+                                }
+                              >
+                                <option value="sync">sync</option>
+                                <option value="async">async</option>
+                              </select>
+                            </label>
+                          </div>
+                          <label className="grid gap-1.5 text-sm font-bold">
+                            {t('adminThingsModelDescriptionField')}
+                            <textarea
+                              className="min-h-20 resize-y rounded-md border border-linkflow-border bg-white px-3 py-2 text-sm font-medium outline-none transition focus:border-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-page"
+                              value={service.desc}
+                              onChange={(event) =>
+                                updateServiceRow(
+                                  service.localId,
+                                  'desc',
+                                  event.target.value,
+                                )
+                              }
+                              placeholder={t(
+                                'adminThingsModelServiceDescExample',
+                              )}
+                            />
+                          </label>
+                          <ParamDraftList
+                            addLabel={t('adminThingsModelNewParam')}
+                            onAddRow={() =>
+                              addServiceInputParam(service.localId)
+                            }
+                            onChangeRow={(localId, key, value) =>
+                              updateServiceInputParam(
+                                service.localId,
+                                localId,
+                                key,
+                                value,
+                              )
+                            }
+                            onRemoveRow={(localId) =>
+                              removeServiceInputParam(service.localId, localId)
+                            }
+                            rows={service.inputParams}
+                            title={t('adminThingsModelServiceInput')}
+                          />
+                          <ParamDraftList
+                            addLabel={t('adminThingsModelNewParam')}
+                            onAddRow={() =>
+                              addServiceOutputParam(service.localId)
+                            }
+                            onChangeRow={(localId, key, value) =>
+                              updateServiceOutputParam(
+                                service.localId,
+                                localId,
+                                key,
+                                value,
+                              )
+                            }
+                            onRemoveRow={(localId) =>
+                              removeServiceOutputParam(service.localId, localId)
+                            }
+                            rows={service.outputParams}
+                            title={t('adminThingsModelServiceOutput')}
+                          />
+                        </section>
+                      ))}
+                    </div>
                     <JSONPreviewField
                       label={t('adminThingsModelJSONPreview')}
-                      value={form.services}
-                      onChange={(value) => updateFormField('services', value)}
+                      value={serviceDefinitionsText}
                     />
                   </div>
                 ) : null}

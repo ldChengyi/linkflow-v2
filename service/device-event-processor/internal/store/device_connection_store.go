@@ -41,48 +41,62 @@ type DeviceConnectionEvent struct {
 	OccurredAt time.Time
 }
 
-func (s *DeviceConnectionStore) MarkOnline(ctx context.Context, in DeviceConnectionEvent) error {
+func (s *DeviceConnectionStore) MarkOnline(ctx context.Context, in DeviceConnectionEvent) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
-	if err := s.updateConnectionStatus(ctx, in, connectionStatusOnline); err != nil {
-		return err
+	applied, err := s.updateConnectionStatus(ctx, in, connectionStatusOnline)
+	if err != nil {
+		return false, err
+	}
+	if !applied {
+		return false, nil
 	}
 	if err := s.redis.Set(ctx, deviceOnlineKey(in.TenantID, in.DeviceID), in.OccurredAt.UTC().Format(time.RFC3339Nano), s.onlineTTL).Err(); err != nil {
-		return fmt.Errorf("set redis online key: %w", err)
+		return false, fmt.Errorf("set redis online key: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
-func (s *DeviceConnectionStore) MarkOffline(ctx context.Context, in DeviceConnectionEvent) error {
+func (s *DeviceConnectionStore) MarkOffline(ctx context.Context, in DeviceConnectionEvent) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
-	if err := s.updateConnectionStatus(ctx, in, connectionStatusOffline); err != nil {
-		return err
+	applied, err := s.updateConnectionStatus(ctx, in, connectionStatusOffline)
+	if err != nil {
+		return false, err
+	}
+	if !applied {
+		return false, nil
 	}
 	if err := s.redis.Del(ctx, deviceOnlineKey(in.TenantID, in.DeviceID)).Err(); err != nil {
-		return fmt.Errorf("delete redis online key: %w", err)
+		return false, fmt.Errorf("delete redis online key: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
-func (s *DeviceConnectionStore) updateConnectionStatus(ctx context.Context, in DeviceConnectionEvent, status string) error {
+func (s *DeviceConnectionStore) updateConnectionStatus(ctx context.Context, in DeviceConnectionEvent, status string) (bool, error) {
 	const query = `
 UPDATE devices
 SET connection_status = $1,
     last_seen_at = $2,
     updated_at = now()
 WHERE id = $3::uuid
-  AND tenant_id = $4::uuid`
+  AND tenant_id = $4::uuid
+  AND (last_seen_at IS NULL OR last_seen_at <= $2)`
 
-	return s.withAdmin(ctx, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, query, status, in.OccurredAt, in.DeviceID, in.TenantID)
+	var applied bool
+	if err := s.withAdmin(ctx, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, query, status, in.OccurredAt, in.DeviceID, in.TenantID)
 		if err != nil {
 			return fmt.Errorf("update device connection_status: %w", err)
 		}
+		applied = tag.RowsAffected() > 0
 		return nil
-	})
+	}); err != nil {
+		return false, err
+	}
+	return applied, nil
 }
 
 func (s *DeviceConnectionStore) withAdmin(ctx context.Context, fn func(pgx.Tx) error) error {

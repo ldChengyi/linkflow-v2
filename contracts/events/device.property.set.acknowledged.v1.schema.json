@@ -15,7 +15,12 @@
         "success"
     ],
     "additionalProperties": false,
-    "properties": {
+        "properties": {
+        "command_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional cloud-generated command id from the property set request, when the device echoes it."
+        },
         "tenant_id": {
             "type": "string",
             "minLength": 1,

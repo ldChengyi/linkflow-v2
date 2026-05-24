@@ -18,6 +18,7 @@ import (
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/config"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/consumer"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/handler"
+	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/mqtt"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/processor"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/publisher"
 	"github.com/ldchengyi/linkflow-v2/service/device-event-processor/internal/store"
@@ -94,6 +95,10 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create property report store: %w", err)
 	}
+	propertySetStore, err := store.NewPropertySetStore(pool)
+	if err != nil {
+		return fmt.Errorf("create property set store: %w", err)
+	}
 	eventReportStore, err := store.NewEventReportStore(pool)
 	if err != nil {
 		return fmt.Errorf("create event report store: %w", err)
@@ -101,6 +106,15 @@ func run(ctx context.Context, log *slog.Logger) error {
 	serviceCallStore, err := store.NewServiceCallStore(pool)
 	if err != nil {
 		return fmt.Errorf("create service call store: %w", err)
+	}
+	mqttPublisher, err := mqtt.NewPublisher(mqtt.PublisherOptions{
+		BaseURL:   cfg.EMQXAPIURL,
+		APIKey:    cfg.EMQXAPIKey,
+		APISecret: cfg.EMQXAPISecret,
+		Timeout:   cfg.EMQXPublishTimeout,
+	})
+	if err != nil {
+		return fmt.Errorf("create mqtt publisher: %w", err)
 	}
 
 	thingsModelReader, err := store.NewThingsModelReader(pool)
@@ -125,6 +139,14 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create property report handler: %w", err)
 	}
+	propertySetHandler, err := handler.NewPropertySetHandler(propertySetStore, log)
+	if err != nil {
+		return fmt.Errorf("create property set handler: %w", err)
+	}
+	propertySetRequestedHandler, err := handler.NewPropertySetRequestedHandler(propertySetStore, mqttPublisher, log)
+	if err != nil {
+		return fmt.Errorf("create property set requested handler: %w", err)
+	}
 	eventReportHandler, err := handler.NewEventReportHandler(eventReportStore, eventReportValidator, eventPublisher, log)
 	if err != nil {
 		return fmt.Errorf("create event report handler: %w", err)
@@ -133,12 +155,25 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create service call handler: %w", err)
 	}
+	serviceCallRequestedHandler, err := handler.NewServiceCallRequestedHandler(serviceCallStore, mqttPublisher, log)
+	if err != nil {
+		return fmt.Errorf("create service call requested handler: %w", err)
+	}
 
 	if err := eventProcessor.Register(event.DevicePropertyReported, propertyReportHandler); err != nil {
 		return fmt.Errorf("register property reported handler: %w", err)
 	}
+	if err := eventProcessor.Register(event.DevicePropertySetRequested, propertySetRequestedHandler); err != nil {
+		return fmt.Errorf("register property set requested handler: %w", err)
+	}
+	if err := eventProcessor.Register(event.DevicePropertySetAcknowledged, propertySetHandler); err != nil {
+		return fmt.Errorf("register property set acknowledged handler: %w", err)
+	}
 	if err := eventProcessor.Register(event.DeviceEventReported, eventReportHandler); err != nil {
 		return fmt.Errorf("register event reported handler: %w", err)
+	}
+	if err := eventProcessor.Register(event.DeviceServiceCallRequested, serviceCallRequestedHandler); err != nil {
+		return fmt.Errorf("register service call requested handler: %w", err)
 	}
 	if err := eventProcessor.Register(event.DeviceServiceCallAcknowledged, serviceCallHandler); err != nil {
 		return fmt.Errorf("register service call acknowledged handler: %w", err)

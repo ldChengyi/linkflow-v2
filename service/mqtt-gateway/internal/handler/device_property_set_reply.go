@@ -12,6 +12,7 @@ import (
 )
 
 type propertySetReplyMessage struct {
+	CommandID  string         `json:"command_id"`
 	Success    *bool          `json:"success"`
 	Code       string         `json:"code"`
 	Message    string         `json:"message"`
@@ -39,6 +40,7 @@ func DevicePropertySetReply(spec event.Spec, ef event.EnvelopeFactory, pub publi
 		}
 
 		p := event.PropertySetAcknowledgedPayload{
+			CommandID:  in.CommandID,
 			TenantSlug: msg.Vars["tenant_slug"],
 			DeviceSlug: msg.Vars["device_slug"],
 			ProductKey: msg.Vars["product_key"],

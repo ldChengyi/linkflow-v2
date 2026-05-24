@@ -1,0 +1,109 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://linkflow.dev/contracts/events/lf.v1.device.service.call.requested",
+    "title": "device.service.call.requested v1",
+    "description": "Emitted by the backend when a cloud-to-device service call has been requested and should be dispatched to the device over MQTT.",
+    "type": "object",
+    "required": [
+        "command_id",
+        "tenant_id",
+        "product_id",
+        "device_id",
+        "tenant_slug",
+        "product_key",
+        "device_slug",
+        "protocol",
+        "topic",
+        "service_name",
+        "input",
+        "requested_by"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "command_id": {
+            "type": "string",
+            "format": "uuid"
+        },
+        "tenant_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "product_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "device_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        },
+        "tenant_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "product_key": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "device_slug": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+        },
+        "protocol": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 32,
+            "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "topic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+        },
+        "service_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "input": {
+            "type": "object",
+            "patternProperties": {
+                "^[a-z][a-z0-9_]*$": {
+                    "oneOf": [
+                        {
+                            "type": "number"
+                        },
+                        {
+                            "type": "boolean"
+                        },
+                        {
+                            "type": "string",
+                            "maxLength": 1024
+                        },
+                        {
+                            "type": "object",
+                            "additionalProperties": true
+                        },
+                        {
+                            "type": "array"
+                        }
+                    ]
+                }
+            },
+            "additionalProperties": false
+        },
+        "requested_by": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+        }
+    }
+}

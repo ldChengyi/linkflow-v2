@@ -71,6 +71,25 @@ func TestValidateEventAcceptsDeviceEventReported(t *testing.T) {
 	}
 }
 
+func TestValidateEventAcceptsDeviceServiceCallRequested(t *testing.T) {
+	registry := newTestRegistry(t)
+
+	env := validDeviceServiceCallRequestedEvent()
+	raw := mustMarshalJSON(t, env)
+
+	got, err := registry.ValidateEvent(raw)
+	if err != nil {
+		t.Fatalf("ValidateEvent() error = %v", err)
+	}
+
+	if got.EventType != event.DeviceServiceCallRequested.Type {
+		t.Fatalf("EventType = %q", got.EventType)
+	}
+	if got.EventVersion != event.DeviceServiceCallRequested.Version {
+		t.Fatalf("EventVersion = %d", got.EventVersion)
+	}
+}
+
 func TestValidateEventAcceptsDeviceServiceCallAcknowledged(t *testing.T) {
 	registry := newTestRegistry(t)
 
@@ -386,6 +405,34 @@ func validDeviceEventReportedEvent() map[string]any {
 			"params": map[string]any{
 				"temperature": 85.2,
 			},
+		},
+	}
+}
+
+func validDeviceServiceCallRequestedEvent() map[string]any {
+	return map[string]any{
+		"event_id":       "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db6",
+		"event_type":     event.DeviceServiceCallRequested.Type,
+		"event_version":  event.DeviceServiceCallRequested.Version,
+		"occurred_at":    "2026-05-05T10:00:00Z",
+		"producer":       "backend",
+		"tenant_id":      "default",
+		"correlation_id": "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db9",
+		"payload": map[string]any{
+			"command_id":   "018f56d3-7cb7-7f1a-9b41-3f3a63fd3db9",
+			"tenant_id":    "default",
+			"product_id":   "product-1",
+			"device_id":    "device-1",
+			"tenant_slug":  "default",
+			"product_key":  "esp32",
+			"device_slug":  "dev-001",
+			"protocol":     "mqtt",
+			"topic":        "lf/v1/default/esp32/dev-001/service/down/reboot",
+			"service_name": "reboot",
+			"input": map[string]any{
+				"delay": 5,
+			},
+			"requested_by": "user-1",
 		},
 	}
 }

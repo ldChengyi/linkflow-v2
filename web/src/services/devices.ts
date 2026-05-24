@@ -38,6 +38,33 @@ export interface DeviceLatestProperties {
   received_at?: string;
 }
 
+export interface DevicePropertyTrendPoint {
+  bucket_at: string;
+  value: number;
+  min: number;
+  max: number;
+  count: number;
+}
+
+export interface DevicePropertyTrendSeries {
+  property: string;
+  points: DevicePropertyTrendPoint[];
+}
+
+export interface DevicePropertyTrend {
+  device_id: string;
+  tenant_id: string;
+  product_id: string;
+  product_key: string;
+  device_slug: string;
+  properties: string[];
+  from: string;
+  to: string;
+  bucket_seconds: number;
+  agg: string;
+  series: DevicePropertyTrendSeries[];
+}
+
 export interface DeviceEventEntry {
   event_id: string;
   tenant_id: string;
@@ -58,6 +85,34 @@ export interface DeviceServiceCallResult {
   service_name: string;
   input: Record<string, unknown>;
   sent_at: string;
+}
+
+export interface DevicePropertySetResult {
+  command_id: string;
+  topic: string;
+  properties: Record<string, unknown>;
+  sent_at: string;
+}
+
+export interface DevicePropertySetHistoryEntry {
+  command_id: string;
+  tenant_id: string;
+  product_id: string;
+  product_key: string;
+  device_slug: string;
+  topic: string;
+  properties: Record<string, unknown>;
+  occurred_at: string;
+  ack_deadline_at: string;
+  ack_status: DeviceServiceAckStatus;
+  ack_event_id?: string;
+  ack_success?: boolean;
+  ack_code?: string;
+  ack_message?: string;
+  ack_properties?: Record<string, unknown>;
+  ack_occurred_at?: string;
+  ack_received_at?: string;
+  ack_deadline_seconds: number;
 }
 
 export interface DeviceServiceCallHistoryEntry {
@@ -95,8 +150,25 @@ export interface DeviceEventHistoryParams extends Record<string, unknown> {
   page_size: number;
 }
 
-export interface DeviceServiceCallHistoryParams extends Record<string, unknown> {
+export interface DevicePropertyTrendParams extends Record<string, unknown> {
+  properties: string;
+  from: string;
+  to: string;
+  bucket_seconds: number;
+  agg: string;
+}
+
+export interface DeviceServiceCallHistoryParams
+  extends Record<string, unknown> {
   service_name?: string;
+  ack_deadline_seconds: number;
+  page: number;
+  page_size: number;
+}
+
+export interface DevicePropertySetHistoryParams
+  extends Record<string, unknown> {
+  property_name?: string;
   ack_deadline_seconds: number;
   page: number;
   page_size: number;
@@ -122,6 +194,10 @@ export interface DeviceServiceCallInput {
   input: Record<string, unknown>;
 }
 
+export interface DevicePropertySetInput {
+  properties: Record<string, unknown>;
+}
+
 export interface DeviceDeleteResult {
   deleted: boolean;
 }
@@ -138,6 +214,19 @@ export const getDeviceLatestProperties = (deviceId: string) => {
     `/api/v1/devices/${deviceId}/properties/latest`,
     {
       method: 'GET',
+    },
+  );
+};
+
+export const getDevicePropertyTrend = (
+  deviceId: string,
+  params: DevicePropertyTrendParams,
+) => {
+  return apiRequest<DevicePropertyTrend>(
+    `/api/v1/devices/${deviceId}/properties/trend`,
+    {
+      method: 'GET',
+      params,
     },
   );
 };
@@ -169,12 +258,38 @@ export const callDeviceService = (
   );
 };
 
+export const setDeviceProperties = (
+  deviceId: string,
+  body: DevicePropertySetInput,
+) => {
+  return apiRequest<DevicePropertySetResult>(
+    `/api/v1/devices/${deviceId}/property/set`,
+    {
+      method: 'POST',
+      data: body,
+    },
+  );
+};
+
 export const listDeviceServiceCalls = (
   deviceId: string,
   params: DeviceServiceCallHistoryParams,
 ) => {
   return apiRequest<PageResult<DeviceServiceCallHistoryEntry>>(
     `/api/v1/devices/${deviceId}/services/history`,
+    {
+      method: 'GET',
+      params,
+    },
+  );
+};
+
+export const listDevicePropertySets = (
+  deviceId: string,
+  params: DevicePropertySetHistoryParams,
+) => {
+  return apiRequest<PageResult<DevicePropertySetHistoryEntry>>(
+    `/api/v1/devices/${deviceId}/property/set/history`,
     {
       method: 'GET',
       params,

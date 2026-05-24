@@ -10,21 +10,21 @@ import (
 	"github.com/ldchengyi/linkflow-v2/pkg/public/contracts/event"
 )
 
-type ServiceCallStore struct {
+type PropertySetStore struct {
 	pool *pgxpool.Pool
 }
 
-func NewServiceCallStore(pool *pgxpool.Pool) (*ServiceCallStore, error) {
+func NewPropertySetStore(pool *pgxpool.Pool) (*PropertySetStore, error) {
 	if pool == nil {
 		return nil, fmt.Errorf("postgres pool is nil")
 	}
-	return &ServiceCallStore{pool: pool}, nil
+	return &PropertySetStore{pool: pool}, nil
 }
 
-func (s *ServiceCallStore) SaveServiceCallRequest(
+func (s *PropertySetStore) SavePropertySetRequest(
 	ctx context.Context,
 	env *event.Envelope,
-	payload event.ServiceCallRequestedPayload,
+	payload event.PropertySetRequestedPayload,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -33,42 +33,38 @@ func (s *ServiceCallStore) SaveServiceCallRequest(
 		return fmt.Errorf("event envelope is nil")
 	}
 	if payload.CommandID == "" {
-		return fmt.Errorf("service call command_id is empty")
+		return fmt.Errorf("property set command_id is empty")
 	}
-	if payload.ServiceName == "" {
-		return fmt.Errorf("service call service_name is empty")
-	}
-	if payload.Input == nil {
-		payload.Input = map[string]any{}
+	if len(payload.Properties) == 0 {
+		return fmt.Errorf("property set properties are empty")
 	}
 
 	occurredAt, err := time.Parse(time.RFC3339Nano, env.OccurredAt)
 	if err != nil {
 		return fmt.Errorf("parse occurred_at %q: %w", env.OccurredAt, err)
 	}
-	input, err := json.Marshal(payload.Input)
+	properties, err := json.Marshal(payload.Properties)
 	if err != nil {
-		return fmt.Errorf("encode service call input: %w", err)
+		return fmt.Errorf("encode property set properties: %w", err)
 	}
 
 	const query = `
-	  INSERT INTO device_service_call_events (
+	  INSERT INTO device_property_set_events (
 	        command_id,
 	        tenant_id,
 	        product_key,
 	        device_slug,
-	        service_name,
 	        protocol,
 	        topic,
 	        occurred_at,
 	        producer,
 	        requested_by,
-	        input
+	        properties
 	  ) VALUES (
-	        $1, $2, $3, $4, $5, $6, $7, $8,
+	        $1, $2, $3, $4, $5, $6, $7,
+	        $8,
 	        $9,
-	        $10,
-	        $11::jsonb
+	        $10::jsonb
 	  )
 	  ON CONFLICT (command_id, occurred_at) DO NOTHING`
 
@@ -79,24 +75,23 @@ func (s *ServiceCallStore) SaveServiceCallRequest(
 		env.TenantID,
 		payload.ProductKey,
 		payload.DeviceSlug,
-		payload.ServiceName,
 		payload.Protocol,
 		payload.Topic,
 		occurredAt,
 		env.Producer,
 		payload.RequestedBy,
-		input,
+		properties,
 	); err != nil {
-		return fmt.Errorf("insert device service call event: %w", err)
+		return fmt.Errorf("insert device property set event: %w", err)
 	}
 
 	return nil
 }
 
-func (s *ServiceCallStore) SaveServiceCallAcknowledgement(
+func (s *PropertySetStore) SavePropertySetAcknowledgement(
 	ctx context.Context,
 	env *event.Envelope,
-	payload event.ServiceCallAcknowledgedPayload,
+	payload event.PropertySetAcknowledgedPayload,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -104,14 +99,11 @@ func (s *ServiceCallStore) SaveServiceCallAcknowledgement(
 	if env == nil {
 		return fmt.Errorf("event envelope is nil")
 	}
-	if payload.ServiceName == "" {
-		return fmt.Errorf("service call service_name is empty")
+	if payload.Properties == nil {
+		payload.Properties = map[string]any{}
 	}
-	if payload.CommandID == "" {
-		return fmt.Errorf("service call command_id is empty")
-	}
-	if payload.Output == nil {
-		payload.Output = map[string]any{}
+	if payload.Raw == nil {
+		payload.Raw = map[string]any{}
 	}
 
 	occurredAt, err := time.Parse(time.RFC3339Nano, env.OccurredAt)
@@ -120,13 +112,12 @@ func (s *ServiceCallStore) SaveServiceCallAcknowledgement(
 	}
 
 	const query = `
-	  INSERT INTO device_service_call_ack_events (
+	  INSERT INTO device_property_set_ack_events (
 	        event_id,
 	        command_id,
 	        tenant_id,
 	        product_key,
 	        device_slug,
-	        service_name,
 	        protocol,
 	        success,
 	        code,
@@ -136,11 +127,11 @@ func (s *ServiceCallStore) SaveServiceCallAcknowledgement(
 	        trace_id,
 	        correlation_id,
 	        causation_id,
-	        output,
+	        properties,
 	        raw
 	  ) VALUES (
-	        $1, $2, $3, $4, $5, $6, $7, $8,
-	        $9, $10, $11, $12, $13, $14, $15, $16, $17
+	        $1, $2, $3, $4, $5, $6, $7,
+	        $8, $9, $10, $11, $12, $13, $14, $15, $16
 	  )
 	  ON CONFLICT (event_id, occurred_at) DO NOTHING`
 
@@ -148,11 +139,10 @@ func (s *ServiceCallStore) SaveServiceCallAcknowledgement(
 		ctx,
 		query,
 		env.EventID,
-		payload.CommandID,
+		nullIfEmpty(payload.CommandID),
 		env.TenantID,
 		payload.ProductKey,
 		payload.DeviceSlug,
-		payload.ServiceName,
 		payload.Protocol,
 		payload.Success,
 		nullIfEmpty(payload.Code),
@@ -162,10 +152,10 @@ func (s *ServiceCallStore) SaveServiceCallAcknowledgement(
 		nullIfEmpty(env.TraceID),
 		nullIfEmpty(env.CorrelationID),
 		nullIfEmpty(env.CausationID),
-		payload.Output,
+		payload.Properties,
 		emptyMapAsNil(payload.Raw),
 	); err != nil {
-		return fmt.Errorf("insert device service call ack event: %w", err)
+		return fmt.Errorf("insert device property set ack event: %w", err)
 	}
 
 	return nil

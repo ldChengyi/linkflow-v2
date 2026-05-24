@@ -15,8 +15,8 @@ import (
 )
 
 type DeviceConnectionStore interface {
-	MarkOnline(ctx context.Context, in store.DeviceConnectionEvent) error
-	MarkOffline(ctx context.Context, in store.DeviceConnectionEvent) error
+	MarkOnline(ctx context.Context, in store.DeviceConnectionEvent) (bool, error)
+	MarkOffline(ctx context.Context, in store.DeviceConnectionEvent) (bool, error)
 }
 
 type DeviceConnectedHandler struct {
@@ -69,12 +69,13 @@ func (h *DeviceConnectedHandler) Handle(ctx context.Context, env *event.Envelope
 		return result
 	}
 
-	if err := h.store.MarkOnline(ctx, store.DeviceConnectionEvent{
+	applied, err := h.store.MarkOnline(ctx, store.DeviceConnectionEvent{
 		TenantID:   payload.TenantID,
 		ProductID:  payload.ProductID,
 		DeviceID:   payload.DeviceID,
 		OccurredAt: occurredAt,
-	}); err != nil {
+	})
+	if err != nil {
 		h.log.Warn(
 			"mark device online failed",
 			"event_id", env.EventID,
@@ -84,6 +85,10 @@ func (h *DeviceConnectedHandler) Handle(ctx context.Context, env *event.Envelope
 		)
 		result.Decision = messaging.DecisionRetry
 		result.Err = fmt.Errorf("mark device online: %w", err)
+		return result
+	}
+	if !applied {
+		result.Decision = messaging.DecisionAck
 		return result
 	}
 
@@ -162,12 +167,13 @@ func (h *DeviceDisconnectedHandler) Handle(ctx context.Context, env *event.Envel
 		return result
 	}
 
-	if err := h.store.MarkOffline(ctx, store.DeviceConnectionEvent{
+	applied, err := h.store.MarkOffline(ctx, store.DeviceConnectionEvent{
 		TenantID:   payload.TenantID,
 		ProductID:  payload.ProductID,
 		DeviceID:   payload.DeviceID,
 		OccurredAt: occurredAt,
-	}); err != nil {
+	})
+	if err != nil {
 		h.log.Warn(
 			"mark device offline failed",
 			"event_id", env.EventID,
@@ -177,6 +183,10 @@ func (h *DeviceDisconnectedHandler) Handle(ctx context.Context, env *event.Envel
 		)
 		result.Decision = messaging.DecisionRetry
 		result.Err = fmt.Errorf("mark device offline: %w", err)
+		return result
+	}
+	if !applied {
+		result.Decision = messaging.DecisionAck
 		return result
 	}
 

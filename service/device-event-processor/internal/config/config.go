@@ -32,6 +32,11 @@ type Config struct {
 
 	DeviceOnlineTTL time.Duration
 
+	EMQXAPIURL         string
+	EMQXAPIKey         string
+	EMQXAPISecret      string
+	EMQXPublishTimeout time.Duration
+
 	ContractsDir string
 }
 
@@ -105,6 +110,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	emqxPublishTimeout, err := getEnvDuration("EMQX_PUBLISH_TIMEOUT", 3*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		KafkaBrokers:         kafkaBrokers,
@@ -130,6 +139,11 @@ func Load() (Config, error) {
 
 		DeviceOnlineTTL: deviceOnlineTTL,
 
+		EMQXAPIURL:         getEnv("EMQX_API_URL", "http://127.0.0.1:18083"),
+		EMQXAPIKey:         getEnv("EMQX_API_KEY", "linkflow-init"),
+		EMQXAPISecret:      getEnv("EMQX_API_SECRET", "linkflow-init-secret"),
+		EMQXPublishTimeout: emqxPublishTimeout,
+
 		ContractsDir: getEnv("CONTRACTS_DIR", "../../contracts"),
 	}
 
@@ -141,6 +155,15 @@ func Load() (Config, error) {
 	}
 	if cfg.RedisAddr == "" {
 		return Config{}, fmt.Errorf("REDIS_ADDR is required")
+	}
+	if cfg.EMQXAPIURL == "" {
+		return Config{}, fmt.Errorf("EMQX_API_URL is required")
+	}
+	if cfg.EMQXAPIKey == "" {
+		return Config{}, fmt.Errorf("EMQX_API_KEY is required")
+	}
+	if cfg.EMQXAPISecret == "" {
+		return Config{}, fmt.Errorf("EMQX_API_SECRET is required")
 	}
 	if cfg.ContractsDir == "" {
 		return Config{}, fmt.Errorf("CONTRACTS_DIR is required")

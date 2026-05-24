@@ -95,9 +95,6 @@ services:
       AUTH_ACCESS_TOKEN_SECRET: dev-only-linkflow-access-token-secret-change-before-production
       MQTT_GATEWAY_USERNAME: linkflow-mqtt-gateway
       MQTT_GATEWAY_PASSWORD: linkflow-mqtt-gateway-secret
-      EMQX_API_URL: http://emqx:18083
-      EMQX_API_KEY: linkflow-init
-      EMQX_API_SECRET: linkflow-init-secret
       KAFKA_BROKERS: redpanda:9092
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://127.0.0.1:18080/internal/emqx/healthz" ]
@@ -148,6 +145,9 @@ services:
       POSTGRES_DSN: postgres://linkflow:linkflow123@timescaledb:5432/linkflow?sslmode=disable
       REDIS_ADDR: redis:6379
       DEVICE_ONLINE_TTL: 120s
+      EMQX_API_URL: http://emqx:18083
+      EMQX_API_KEY: linkflow-init
+      EMQX_API_SECRET: linkflow-init-secret
       CONTRACTS_DIR: /app/contracts
     networks:
       - linkflow

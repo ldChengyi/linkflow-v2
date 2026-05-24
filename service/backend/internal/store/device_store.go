@@ -301,6 +301,156 @@ WHERE d.id = $1`
 	return latest, nil
 }
 
+func (s *PostgresDeviceStore) FindDevicePropertyTrend(ctx context.Context, in service.DevicePropertyTrendInput) (service.DevicePropertyTrend, error) {
+	if err := ctx.Err(); err != nil {
+		return service.DevicePropertyTrend{}, err
+	}
+
+	const scopeQuery = `
+SELECT
+    d.id::text,
+    d.tenant_id::text,
+    d.product_id::text,
+    p.product_key,
+    d.device_slug
+FROM devices d
+JOIN products p ON p.id = d.product_id AND p.tenant_id = d.tenant_id
+WHERE d.id = $1`
+
+	const trendQuery = `
+WITH samples AS (
+    SELECT
+        prop.key AS property,
+        time_bucket(make_interval(secs => $7::int), e.occurred_at) AS bucket_at,
+        (prop.value #>> '{}')::double precision AS value,
+        e.occurred_at
+    FROM device_property_report_events e
+    CROSS JOIN LATERAL jsonb_each(e.properties) AS prop(key, value)
+    WHERE e.tenant_id = $1
+      AND e.product_key = $2
+      AND e.device_slug = $3
+      AND prop.key = ANY($4::text[])
+      AND jsonb_typeof(prop.value) = 'number'
+      AND e.occurred_at >= $5
+      AND e.occurred_at < $6
+)
+SELECT
+    property,
+    bucket_at,
+    avg(value),
+    min(value),
+    max(value),
+    last(value, occurred_at),
+    count(*)
+FROM samples
+GROUP BY property, bucket_at
+ORDER BY property ASC, bucket_at ASC`
+
+	trend := service.DevicePropertyTrend{
+		Properties:    append([]string(nil), in.Properties...),
+		From:          in.From,
+		To:            in.To,
+		BucketSeconds: in.BucketSeconds,
+		Aggregate:     in.Aggregate,
+		Series:        make([]service.DevicePropertyTrendSeries, 0, len(in.Properties)),
+	}
+	seriesByProperty := make(map[string]int, len(in.Properties))
+	for _, property := range in.Properties {
+		seriesByProperty[property] = len(trend.Series)
+		trend.Series = append(trend.Series, service.DevicePropertyTrendSeries{
+			Property: property,
+			Points:   []service.DevicePropertyTrendPoint{},
+		})
+	}
+
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, scopeQuery, in.DeviceID).Scan(
+			&trend.DeviceID,
+			&trend.TenantID,
+			&trend.ProductID,
+			&trend.ProductKey,
+			&trend.DeviceSlug,
+		); err != nil {
+			return err
+		}
+
+		rows, err := tx.Query(
+			ctx,
+			trendQuery,
+			trend.TenantID,
+			trend.ProductKey,
+			trend.DeviceSlug,
+			in.Properties,
+			in.From,
+			in.To,
+			in.BucketSeconds,
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var (
+				property  string
+				bucketAt  sql.NullTime
+				avgValue  float64
+				minValue  float64
+				maxValue  float64
+				lastValue float64
+				count     int
+			)
+			if err := rows.Scan(
+				&property,
+				&bucketAt,
+				&avgValue,
+				&minValue,
+				&maxValue,
+				&lastValue,
+				&count,
+			); err != nil {
+				return err
+			}
+			if !bucketAt.Valid {
+				continue
+			}
+			seriesIndex, ok := seriesByProperty[property]
+			if !ok {
+				continue
+			}
+			trend.Series[seriesIndex].Points = append(trend.Series[seriesIndex].Points, service.DevicePropertyTrendPoint{
+				BucketAt: bucketAt.Time,
+				Value:    trendAggregateValue(in.Aggregate, avgValue, minValue, maxValue, lastValue),
+				Min:      minValue,
+				Max:      maxValue,
+				Count:    count,
+			})
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.DevicePropertyTrend{}, service.ErrDeviceNotFound
+		}
+		return service.DevicePropertyTrend{}, fmt.Errorf("find device property trend: %w", err)
+	}
+
+	return trend, nil
+}
+
+func trendAggregateValue(aggregate string, avgValue float64, minValue float64, maxValue float64, lastValue float64) float64 {
+	switch aggregate {
+	case "min":
+		return minValue
+	case "max":
+		return maxValue
+	case "last":
+		return lastValue
+	default:
+		return avgValue
+	}
+}
+
 func (s *PostgresDeviceStore) ListDeviceEventHistory(ctx context.Context, in service.DeviceEventHistoryInput) (service.PageResult[service.DeviceEventEntry], error) {
 	if err := ctx.Err(); err != nil {
 		return service.PageResult[service.DeviceEventEntry]{}, err
@@ -583,6 +733,172 @@ LIMIT $6 OFFSET $7`
 	return service.NewPageResult(calls, total, in.PageInput), nil
 }
 
+func (s *PostgresDeviceStore) ListDevicePropertySetHistory(ctx context.Context, in service.DevicePropertySetHistoryInput) (service.PageResult[service.DevicePropertySetHistoryEntry], error) {
+	if err := ctx.Err(); err != nil {
+		return service.PageResult[service.DevicePropertySetHistoryEntry]{}, err
+	}
+
+	const scopeQuery = `
+SELECT
+    d.tenant_id::text,
+    d.product_id::text,
+    p.product_key,
+    d.device_slug
+FROM devices d
+JOIN products p ON p.id = d.product_id AND p.tenant_id = d.tenant_id
+WHERE d.id = $1`
+
+	const countQuery = `
+SELECT count(*)
+FROM device_property_set_events
+WHERE tenant_id = $1
+  AND product_key = $2
+  AND device_slug = $3
+  AND ($4 = '' OR properties ? $4)`
+
+	const query = `
+SELECT
+    c.command_id::text,
+    c.tenant_id,
+    c.product_key,
+    c.device_slug,
+    c.topic,
+    c.properties,
+    c.occurred_at,
+    c.occurred_at + make_interval(secs => $5::int),
+    CASE
+      WHEN a.event_id IS NULL AND now() <= c.occurred_at + make_interval(secs => $5::int) THEN 'pending'
+      WHEN a.event_id IS NULL THEN 'failed'
+      WHEN a.success THEN 'success'
+      ELSE 'failed'
+    END,
+    COALESCE(a.event_id::text, ''),
+    a.success,
+    COALESCE(a.code, ''),
+    COALESCE(a.message, ''),
+    COALESCE(a.properties, '{}'::jsonb),
+    a.occurred_at,
+    a.received_at
+FROM device_property_set_events c
+LEFT JOIN LATERAL (
+    SELECT event_id, success, code, message, properties, occurred_at, received_at
+    FROM device_property_set_ack_events
+    WHERE command_id = c.command_id
+    ORDER BY occurred_at DESC, event_id DESC
+    LIMIT 1
+) a ON true
+WHERE c.tenant_id = $1
+  AND c.product_key = $2
+  AND c.device_slug = $3
+  AND ($4 = '' OR c.properties ? $4)
+ORDER BY c.occurred_at DESC, c.command_id DESC
+LIMIT $6 OFFSET $7`
+
+	var (
+		tenantID   string
+		productID  string
+		productKey string
+		deviceSlug string
+		sets       []service.DevicePropertySetHistoryEntry
+		total      int
+	)
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		if err := tx.QueryRow(ctx, scopeQuery, in.DeviceID).Scan(
+			&tenantID,
+			&productID,
+			&productKey,
+			&deviceSlug,
+		); err != nil {
+			return err
+		}
+
+		if err := tx.QueryRow(ctx, countQuery, tenantID, productKey, deviceSlug, in.PropertyName).Scan(&total); err != nil {
+			return err
+		}
+
+		rows, err := tx.Query(
+			ctx,
+			query,
+			tenantID,
+			productKey,
+			deviceSlug,
+			in.PropertyName,
+			in.AckDeadlineSeconds,
+			in.PageInput.Limit(),
+			in.PageInput.Offset(),
+		)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var entry service.DevicePropertySetHistoryEntry
+			var properties []byte
+			var ackProperties []byte
+			var ackSuccess sql.NullBool
+			var ackOccurredAt sql.NullTime
+			var ackReceivedAt sql.NullTime
+			if err := rows.Scan(
+				&entry.CommandID,
+				&entry.TenantID,
+				&entry.ProductKey,
+				&entry.DeviceSlug,
+				&entry.Topic,
+				&properties,
+				&entry.OccurredAt,
+				&entry.AckDeadlineAt,
+				&entry.AckStatus,
+				&entry.AckEventID,
+				&ackSuccess,
+				&entry.AckCode,
+				&entry.AckMessage,
+				&ackProperties,
+				&ackOccurredAt,
+				&ackReceivedAt,
+			); err != nil {
+				return err
+			}
+			entry.ProductID = productID
+			entry.AckDeadlineSeconds = in.AckDeadlineSeconds
+			entry.Properties = map[string]any{}
+			if len(properties) > 0 {
+				if err := json.Unmarshal(properties, &entry.Properties); err != nil {
+					return fmt.Errorf("unmarshal device property set properties: %w", err)
+				}
+			}
+			entry.AckProperties = map[string]any{}
+			if len(ackProperties) > 0 {
+				if err := json.Unmarshal(ackProperties, &entry.AckProperties); err != nil {
+					return fmt.Errorf("unmarshal device property set ack properties: %w", err)
+				}
+			}
+			if ackSuccess.Valid {
+				success := ackSuccess.Bool
+				entry.AckSuccess = &success
+			}
+			if ackOccurredAt.Valid {
+				t := ackOccurredAt.Time
+				entry.AckOccurredAt = &t
+			}
+			if ackReceivedAt.Valid {
+				t := ackReceivedAt.Time
+				entry.AckReceivedAt = &t
+			}
+			sets = append(sets, entry)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.PageResult[service.DevicePropertySetHistoryEntry]{}, service.ErrDeviceNotFound
+		}
+		return service.PageResult[service.DevicePropertySetHistoryEntry]{}, fmt.Errorf("list device property set history: %w", err)
+	}
+
+	return service.NewPageResult(sets, total, in.PageInput), nil
+}
+
 func (s *PostgresDeviceStore) FindDeviceServiceCallTarget(ctx context.Context, in service.DeviceServiceCallTargetInput) (service.DeviceServiceCallTarget, error) {
 	if err := ctx.Err(); err != nil {
 		return service.DeviceServiceCallTarget{}, err
@@ -642,56 +958,63 @@ func (s *PostgresDeviceStore) FindDeviceServiceCallTarget(ctx context.Context, i
 	return target, nil
 }
 
-func (s *PostgresDeviceStore) SaveDeviceServiceCall(ctx context.Context, in service.DeviceServiceCallRecord) error {
+func (s *PostgresDeviceStore) FindDevicePropertySetTarget(ctx context.Context, in service.DevicePropertySetTargetInput) (service.DevicePropertySetTarget, error) {
 	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if in.Input == nil {
-		in.Input = map[string]any{}
-	}
-	input, err := json.Marshal(in.Input)
-	if err != nil {
-		return fmt.Errorf("encode device service call input: %w", err)
+		return service.DevicePropertySetTarget{}, err
 	}
 
 	const query = `
-	INSERT INTO device_service_call_events (
-	    command_id,
-	    tenant_id,
-	    product_key,
-	    device_slug,
-	    service_name,
-	    protocol,
-	    topic,
-	    occurred_at,
-	    producer,
-	    requested_by,
-	    input
-	) VALUES (
-	    $1, $2, $3, $4, $5, $6, $7, $8,
-	    'backend',
-	    $9,
-	    $10::jsonb
-	)
-	ON CONFLICT (command_id, occurred_at) DO NOTHING`
+	SELECT
+	    t.id::text,
+	    p.id::text,
+	    d.id::text,
+	    t.tenant_slug,
+	    p.product_key,
+	    d.device_slug,
+	    d.status,
+	    d.connection_status,
+	    COALESCE(tm.properties, '{}'::jsonb)
+	FROM devices d
+	JOIN tenants t ON t.id = d.tenant_id
+	JOIN products p ON p.id = d.product_id AND p.tenant_id = d.tenant_id
+	LEFT JOIN LATERAL (
+	    SELECT properties
+	    FROM thingsmodel
+	    WHERE tenant_id = d.tenant_id
+	      AND product_id = d.product_id
+	      AND is_current = true
+	    LIMIT 1
+	) tm ON true
+	WHERE d.id = $1`
 
-	if _, err := s.actor.pool.Exec(
-		ctx,
-		query,
-		in.CommandID,
-		in.TenantID,
-		in.ProductKey,
-		in.DeviceSlug,
-		in.ServiceName,
-		in.Protocol,
-		in.Topic,
-		in.OccurredAt,
-		in.RequestedBy,
-		input,
-	); err != nil {
-		return fmt.Errorf("insert device service call event: %w", err)
+	var target service.DevicePropertySetTarget
+	var propertiesRaw []byte
+	err := s.withDeviceUser(ctx, in.UserID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx, query, in.DeviceID).Scan(
+			&target.TenantID,
+			&target.ProductID,
+			&target.DeviceID,
+			&target.TenantSlug,
+			&target.ProductKey,
+			&target.DeviceSlug,
+			&target.DeviceStatus,
+			&target.ConnectionStatus,
+			&propertiesRaw,
+		)
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return service.DevicePropertySetTarget{}, service.ErrDeviceNotFound
+		}
+		return service.DevicePropertySetTarget{}, fmt.Errorf("find device property set target: %w", err)
 	}
-	return nil
+	if err := json.Unmarshal(propertiesRaw, &target.Properties); err != nil {
+		return service.DevicePropertySetTarget{}, fmt.Errorf("decode device property set properties: %w", err)
+	}
+	if target.Properties == nil {
+		target.Properties = service.ThingsModelObject{}
+	}
+	return target, nil
 }
 
 func (s *PostgresDeviceStore) UpdateDevice(ctx context.Context, in service.DeviceUpdateInput) (service.Device, error) {

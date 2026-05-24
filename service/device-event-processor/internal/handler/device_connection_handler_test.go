@@ -12,20 +12,22 @@ import (
 )
 
 type fakeConnectionStore struct {
-	online    []store.DeviceConnectionEvent
-	offline   []store.DeviceConnectionEvent
-	onlineErr error
-	offErr    error
+	online         []store.DeviceConnectionEvent
+	offline        []store.DeviceConnectionEvent
+	onlineIgnored  bool
+	offlineIgnored bool
+	onlineErr      error
+	offErr         error
 }
 
-func (s *fakeConnectionStore) MarkOnline(ctx context.Context, in store.DeviceConnectionEvent) error {
+func (s *fakeConnectionStore) MarkOnline(ctx context.Context, in store.DeviceConnectionEvent) (bool, error) {
 	s.online = append(s.online, in)
-	return s.onlineErr
+	return !s.onlineIgnored, s.onlineErr
 }
 
-func (s *fakeConnectionStore) MarkOffline(ctx context.Context, in store.DeviceConnectionEvent) error {
+func (s *fakeConnectionStore) MarkOffline(ctx context.Context, in store.DeviceConnectionEvent) (bool, error) {
 	s.offline = append(s.offline, in)
-	return s.offErr
+	return !s.offlineIgnored, s.offErr
 }
 
 func newConnectedEnvelope(t *testing.T, payload event.ConnectedPayload) *event.Envelope {
@@ -122,6 +124,27 @@ func TestDeviceConnectedHandlerRetriesOnStoreError(t *testing.T) {
 	}
 }
 
+func TestDeviceConnectedHandlerAcksIgnoredStoreEvent(t *testing.T) {
+	s := &fakeConnectionStore{onlineIgnored: true}
+	pub := &fakePublisher{}
+	h, _ := NewDeviceConnectedHandler(s, pub, nil)
+
+	result := h.Handle(context.Background(), newConnectedEnvelope(t, event.ConnectedPayload{
+		TenantID: "tenant-1", ProductID: "product-1", DeviceID: "device-1",
+		TenantSlug: "tenant", ProductKey: "product", DeviceSlug: "device", Protocol: "mqtt",
+	}))
+
+	if result.Decision != messaging.DecisionAck {
+		t.Fatalf("decision = %q, want ack", result.Decision)
+	}
+	if len(s.online) != 1 {
+		t.Fatal("store should still receive the connection event")
+	}
+	if len(pub.published) != 0 {
+		t.Fatal("publisher should not be called when store ignores a stale event")
+	}
+}
+
 func TestDeviceConnectedHandlerRetriesOnPublisherError(t *testing.T) {
 	s := &fakeConnectionStore{}
 	pub := &fakePublisher{err: errors.New("kafka down")}
@@ -175,6 +198,28 @@ func TestDeviceDisconnectedHandlerMarksOffline(t *testing.T) {
 	}
 	if changed.Reason != "keepalive_timeout" {
 		t.Fatalf("reason = %q, want keepalive_timeout", changed.Reason)
+	}
+}
+
+func TestDeviceDisconnectedHandlerAcksIgnoredStoreEvent(t *testing.T) {
+	s := &fakeConnectionStore{offlineIgnored: true}
+	pub := &fakePublisher{}
+	h, _ := NewDeviceDisconnectedHandler(s, pub, nil)
+
+	result := h.Handle(context.Background(), newDisconnectedEnvelope(t, event.DisconnectedPayload{
+		TenantID: "tenant-1", ProductID: "product-1", DeviceID: "device-1",
+		TenantSlug: "tenant", ProductKey: "product", DeviceSlug: "device",
+		Protocol: "mqtt", Reason: "discarded",
+	}))
+
+	if result.Decision != messaging.DecisionAck {
+		t.Fatalf("decision = %q, want ack", result.Decision)
+	}
+	if len(s.offline) != 1 {
+		t.Fatal("store should still receive the disconnection event")
+	}
+	if len(pub.published) != 0 {
+		t.Fatal("publisher should not be called when store ignores a stale event")
 	}
 }
 

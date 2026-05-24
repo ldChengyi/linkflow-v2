@@ -13,13 +13,14 @@ import (
 	"syscall"
 	"time"
 
+	messagingkafka "github.com/ldchengyi/linkflow-v2/pkg/public/messaging/kafka"
 	publicpostgres "github.com/ldchengyi/linkflow-v2/pkg/public/postgres"
 	publicredis "github.com/ldchengyi/linkflow-v2/pkg/public/redis"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/auth/password"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/auth/token"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/config"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/credential"
-	"github.com/ldchengyi/linkflow-v2/service/backend/internal/emqx"
+	"github.com/ldchengyi/linkflow-v2/service/backend/internal/eventbus"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/handler"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/middleware"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/realtime"
@@ -150,25 +151,31 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("create device store: %w", err)
 	}
-	emqxPublisher, err := emqx.NewPublisher(emqx.PublisherOptions{
-		BaseURL:   cfg.EMQXAPIURL,
-		APIKey:    cfg.EMQXAPIKey,
-		APISecret: cfg.EMQXAPISecret,
-		Timeout:   cfg.EMQXPublishTimeout,
+	eventSink, err := messagingkafka.NewSink(messagingkafka.SinkOptions{
+		Brokers: cfg.KafkaBrokers,
 	})
 	if err != nil {
-		return fmt.Errorf("create emqx publisher: %w", err)
+		return fmt.Errorf("create backend event sink: %w", err)
 	}
-	serviceCallPublisher, err := emqx.NewServiceCallPublisher(emqxPublisher)
+	defer func() {
+		if err := eventSink.Close(); err != nil {
+			log.Warn("close backend event sink", "err", err)
+		}
+	}()
+	serviceCallPublisher, err := eventbus.NewServiceCallPublisher(eventSink, "backend")
 	if err != nil {
 		return fmt.Errorf("create service call publisher: %w", err)
+	}
+	propertySetPublisher, err := eventbus.NewPropertySetPublisher(eventSink, "backend")
+	if err != nil {
+		return fmt.Errorf("create property set publisher: %w", err)
 	}
 	deviceService, err := service.NewDeviceService(
 		deviceStore,
 		deviceSecretManager,
 		service.WithDeviceServiceCallTargets(deviceStore),
 		service.WithDeviceServiceCallPublisher(serviceCallPublisher),
-		service.WithDeviceServiceCallRecorder(deviceStore),
+		service.WithDevicePropertySetPublisher(propertySetPublisher),
 	)
 	if err != nil {
 		return fmt.Errorf("create device service: %w", err)

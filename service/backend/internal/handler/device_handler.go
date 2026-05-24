@@ -4,6 +4,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/httperror"
 	"github.com/ldchengyi/linkflow-v2/service/backend/internal/middleware"
@@ -36,6 +38,10 @@ type deviceServiceCallRequest struct {
 	Input map[string]any `json:"input"`
 }
 
+type devicePropertySetRequest struct {
+	Properties map[string]any `json:"properties"`
+}
+
 func NewDeviceHandler(service *service.DeviceService, log *slog.Logger) (*DeviceHandler, error) {
 	if service == nil {
 		return nil, errors.New("device service is nil")
@@ -53,6 +59,9 @@ func (h *DeviceHandler) RegisterRoutes(mux RouteRegistrar, authenticate func(htt
 	mux.Handle("POST /api/v1/devices", authenticatedBusinessHandler(http.HandlerFunc(h.create), authenticate, audit))
 	mux.Handle("GET /api/v1/devices", authenticate(http.HandlerFunc(h.list)))
 	mux.Handle("GET /api/v1/devices/{device_id}/properties/latest", authenticate(http.HandlerFunc(h.latestProperties)))
+	mux.Handle("GET /api/v1/devices/{device_id}/properties/trend", authenticate(http.HandlerFunc(h.propertyTrend)))
+	mux.Handle("POST /api/v1/devices/{device_id}/property/set", authenticatedBusinessHandler(http.HandlerFunc(h.setProperties), authenticate, audit))
+	mux.Handle("GET /api/v1/devices/{device_id}/property/set/history", authenticate(http.HandlerFunc(h.propertySetHistory)))
 	mux.Handle("GET /api/v1/devices/{device_id}/events", authenticate(http.HandlerFunc(h.eventHistory)))
 	mux.Handle("GET /api/v1/devices/{device_id}/services/history", authenticate(http.HandlerFunc(h.serviceCallHistory)))
 	mux.Handle("GET /api/v1/devices/{device_id}", authenticate(http.HandlerFunc(h.get)))
@@ -161,6 +170,31 @@ func (h *DeviceHandler) latestProperties(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, response.SuccessData("ok", http.StatusOK, latest))
 }
 
+func (h *DeviceHandler) propertyTrend(w http.ResponseWriter, r *http.Request) {
+	principal, ok := middleware.PrincipalFromContext(r.Context())
+	if !ok {
+		writeHTTPError(w, httperror.ErrUnauthorized)
+		return
+	}
+
+	query := r.URL.Query()
+	trend, err := h.service.PropertyTrend(r.Context(), service.DevicePropertyTrendInput{
+		UserID:        principal.UserID,
+		DeviceID:      r.PathValue("device_id"),
+		Properties:    trendPropertiesFromRequest(r),
+		From:          parseRFC3339Time(query.Get("from")),
+		To:            parseRFC3339Time(query.Get("to")),
+		BucketSeconds: parsePositiveInt(query.Get("bucket_seconds")),
+		Aggregate:     query.Get("agg"),
+	})
+	if err != nil {
+		h.writeDeviceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response.SuccessData("ok", http.StatusOK, trend))
+}
+
 func (h *DeviceHandler) eventHistory(w http.ResponseWriter, r *http.Request) {
 	principal, ok := middleware.PrincipalFromContext(r.Context())
 	if !ok {
@@ -202,6 +236,65 @@ func (h *DeviceHandler) serviceCallHistory(w http.ResponseWriter, r *http.Reques
 	}
 
 	writeJSON(w, http.StatusOK, response.SuccessData("ok", http.StatusOK, calls))
+}
+
+func (h *DeviceHandler) propertySetHistory(w http.ResponseWriter, r *http.Request) {
+	principal, ok := middleware.PrincipalFromContext(r.Context())
+	if !ok {
+		writeHTTPError(w, httperror.ErrUnauthorized)
+		return
+	}
+
+	sets, err := h.service.PropertySetHistory(r.Context(), service.DevicePropertySetHistoryInput{
+		UserID:             principal.UserID,
+		DeviceID:           r.PathValue("device_id"),
+		PropertyName:       r.URL.Query().Get("property_name"),
+		AckDeadlineSeconds: parsePositiveInt(r.URL.Query().Get("ack_deadline_seconds")),
+		PageInput:          pageInputFromRequest(r),
+	})
+	if err != nil {
+		h.writeDeviceError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response.SuccessData("ok", http.StatusOK, sets))
+}
+
+func (h *DeviceHandler) setProperties(w http.ResponseWriter, r *http.Request) {
+	principal, ok := middleware.PrincipalFromContext(r.Context())
+	if !ok {
+		writeHTTPError(w, httperror.ErrUnauthorized)
+		return
+	}
+
+	var req devicePropertySetRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeHTTPError(w, err)
+		return
+	}
+
+	deviceID := r.PathValue("device_id")
+	auditRecorder, _ := middleware.AuditFromContext(r.Context())
+	auditRecorder.Set("device.property.set", "device", deviceID, map[string]any{
+		"properties": propertyNames(req.Properties),
+	})
+
+	result, err := h.service.SetProperties(r.Context(), service.DevicePropertySetInput{
+		UserID:     principal.UserID,
+		DeviceID:   deviceID,
+		Properties: req.Properties,
+	})
+	if err != nil {
+		auditRecorder.SetErrorCode(mapDeviceError(err).Code)
+		h.writeDeviceError(w, err)
+		return
+	}
+	auditRecorder.AddMetadata(map[string]any{
+		"command_id": result.CommandID,
+		"topic":      result.Topic,
+	})
+
+	writeJSON(w, http.StatusAccepted, response.SuccessData("property set dispatched", http.StatusAccepted, result))
 }
 
 func (h *DeviceHandler) callService(w http.ResponseWriter, r *http.Request) {
@@ -306,6 +399,33 @@ func (h *DeviceHandler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, response.SuccessData("device deleted", http.StatusOK, map[string]bool{"deleted": true}))
+}
+
+func trendPropertiesFromRequest(r *http.Request) []string {
+	raw := r.URL.Query().Get("properties")
+	if raw == "" {
+		raw = r.URL.Query().Get("property")
+	}
+	return strings.Split(raw, ",")
+}
+
+func parseRFC3339Time(raw string) time.Time {
+	if raw == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
+}
+
+func propertyNames(properties map[string]any) []string {
+	names := make([]string, 0, len(properties))
+	for name := range properties {
+		names = append(names, name)
+	}
+	return names
 }
 
 func (h *DeviceHandler) writeDeviceError(w http.ResponseWriter, err error) {

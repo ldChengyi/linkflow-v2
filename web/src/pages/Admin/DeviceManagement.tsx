@@ -15,8 +15,10 @@ import { listTenants, type Tenant } from '@/services/tenants';
 import { formatDateTime } from '@/utils/date';
 import {
   CloseOutlined,
+  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
+  KeyOutlined,
   PlusOutlined,
   SaveOutlined,
 } from '@ant-design/icons';
@@ -107,11 +109,20 @@ const DeviceManagement = () => {
   const [editingDevice, setEditingDevice] = useState<Device | null>(null);
   const [form, setForm] = useState<DeviceFormState>(emptyForm);
   const [createdSecret, setCreatedSecret] = useState('');
+  const [deviceSecretsById, setDeviceSecretsById] = useState<
+    Record<string, string>
+  >({});
+  const [secretDialogDevice, setSecretDialogDevice] = useState<Device | null>(
+    null,
+  );
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const productNameById = new Map(
     products.map((product) => [product.id, product.product_name]),
   );
+  const selectedDeviceSecret = secretDialogDevice
+    ? deviceSecretsById[secretDialogDevice.id]
+    : '';
 
   useEffect(() => {
     let cancelled = false;
@@ -404,6 +415,12 @@ const DeviceManagement = () => {
           placement: 'topRight',
         });
         setCreatedSecret(result.device_secret ?? '');
+        if (result.device_secret) {
+          setDeviceSecretsById((current) => ({
+            ...current,
+            [result.device.id]: result.device_secret ?? '',
+          }));
+        }
         setPage(1);
       }
 
@@ -456,6 +473,14 @@ const DeviceManagement = () => {
         message: t('adminDeviceDeleteSuccess'),
         placement: 'topRight',
       });
+      setDeviceSecretsById((current) => {
+        const next = { ...current };
+        delete next[device.id];
+        return next;
+      });
+      if (secretDialogDevice?.id === device.id) {
+        setSecretDialogDevice(null);
+      }
       if (devices.length === 1 && page > 1) {
         setPage((current) => current - 1);
       } else {
@@ -469,6 +494,25 @@ const DeviceManagement = () => {
       });
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleCopySecret = async (secret: string) => {
+    if (!secret) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(secret);
+      notification.success({
+        message: t('adminDeviceSecretCopied'),
+        placement: 'topRight',
+      });
+    } catch (error) {
+      notification.error({
+        message: t('adminDeviceSecretCopyFailed'),
+        description: error instanceof Error ? error.message : undefined,
+        placement: 'topRight',
+      });
     }
   };
 
@@ -527,6 +571,15 @@ const DeviceManagement = () => {
       headerClassName: 'text-right',
       render: (device) => (
         <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            className="grid h-10 w-10 place-items-center rounded-md border border-linkflow-border bg-white text-linkflow-muted transition hover:border-linkflow-primary hover:text-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-muted dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"
+            aria-label={t('adminDeviceViewSecret')}
+            title={t('adminDeviceViewSecret')}
+            onClick={() => setSecretDialogDevice(device)}
+          >
+            <KeyOutlined aria-hidden="true" />
+          </button>
           <button
             type="button"
             className="grid h-10 w-10 place-items-center rounded-md border border-linkflow-border bg-white text-linkflow-muted transition hover:border-linkflow-primary hover:text-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-muted dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"
@@ -599,10 +652,18 @@ const DeviceManagement = () => {
           <dd className="m-0 mt-1">{formatDateTime(device.updated_at)}</dd>
         </div>
       </dl>
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
         <button
           type="button"
-          className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md border border-linkflow-border bg-white text-sm font-bold text-linkflow-muted transition hover:border-linkflow-primary hover:text-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-muted dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-linkflow-border bg-white text-sm font-bold text-linkflow-muted transition hover:border-linkflow-primary hover:text-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-muted dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"
+          onClick={() => setSecretDialogDevice(device)}
+        >
+          <KeyOutlined aria-hidden="true" />
+          {t('adminDeviceViewSecret')}
+        </button>
+        <button
+          type="button"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-linkflow-border bg-white text-sm font-bold text-linkflow-muted transition hover:border-linkflow-primary hover:text-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-muted dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"
           onClick={() => openEditForm(device)}
         >
           <EditOutlined aria-hidden="true" />
@@ -610,7 +671,7 @@ const DeviceManagement = () => {
         </button>
         <button
           type="button"
-          className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-md border border-linkflow-border bg-white text-sm font-bold text-red-600 transition hover:border-red-500 hover:bg-red-50 dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:hover:border-red-400 dark:hover:bg-red-950/30"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-md border border-linkflow-border bg-white text-sm font-bold text-red-600 transition hover:border-red-500 hover:bg-red-50 dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:hover:border-red-400 dark:hover:bg-red-950/30"
           onClick={() => handleDelete(device)}
           disabled={deletingId === device.id}
         >
@@ -670,6 +731,62 @@ const DeviceManagement = () => {
           </button>
         </div>
       </div>
+
+      {secretDialogDevice ? (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="device-secret-title"
+        >
+          <section className="w-full max-w-xl rounded-lg border border-linkflow-border bg-white p-5 shadow-[0_18px_60px_rgba(15,23,42,0.24)] dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:shadow-black/50">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 id="device-secret-title" className="m-0 text-lg font-bold">
+                  {t('adminDeviceSecretTitle')}
+                </h3>
+                <p className="m-0 mt-1 truncate text-sm font-semibold text-linkflow-primary">
+                  {secretDialogDevice.device_name} /{' '}
+                  {secretDialogDevice.device_slug}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-linkflow-border bg-white text-linkflow-muted transition hover:border-linkflow-primary hover:text-linkflow-primary dark:border-linkflow-dark-border dark:bg-linkflow-dark-panel dark:text-linkflow-dark-muted dark:hover:border-linkflow-dark-primary dark:hover:text-linkflow-dark-primary"
+                aria-label={t('adminDeviceCancel')}
+                onClick={() => setSecretDialogDevice(null)}
+              >
+                <CloseOutlined aria-hidden="true" />
+              </button>
+            </div>
+
+            {selectedDeviceSecret ? (
+              <div className="mt-4 rounded-lg border border-linkflow-primary bg-linkflow-primary-soft p-4 text-linkflow-primary">
+                <p className="m-0 text-sm leading-6">
+                  {t('adminDeviceSecretAvailableDescription')}
+                </p>
+                <code className="mt-3 block overflow-x-auto rounded-md bg-white p-3 text-sm font-bold text-linkflow-text dark:bg-linkflow-dark-page dark:text-linkflow-dark-text">
+                  {selectedDeviceSecret}
+                </code>
+                <button
+                  type="button"
+                  className="mt-3 inline-flex h-11 items-center gap-2 rounded-md bg-linkflow-primary px-4 text-sm font-bold text-white shadow-md shadow-linkflow-primary-soft transition hover:bg-linkflow-primary-hover dark:bg-linkflow-dark-primary dark:text-linkflow-dark-page dark:hover:bg-linkflow-dark-primary-hover"
+                  onClick={() => handleCopySecret(selectedDeviceSecret)}
+                >
+                  <CopyOutlined aria-hidden="true" />
+                  {t('adminDeviceCopySecret')}
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/30 dark:text-amber-200">
+                <p className="m-0 text-sm leading-6">
+                  {t('adminDeviceSecretUnavailableDescription')}
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
 
       {formMode ? (
         <div

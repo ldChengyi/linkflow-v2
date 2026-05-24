@@ -11,9 +11,11 @@ contracts/
 └── events/              Event payload schemas (one file per event type)
     ├── envelope.schema.json
     ├── device.property.reported.v1.schema.json
+    ├── device.property.set.requested.v1.schema.json
     ├── device.property.set.acknowledged.v1.schema.json
     ├── device.event.reported.v1.schema.json
     ├── device.event.received.v1.schema.json
+    ├── device.service.call.requested.v1.schema.json
     └── device.service.call.acknowledged.v1.schema.json
 ```
 
@@ -39,9 +41,11 @@ For example:
 | `event_type` | `event_version` | Payload schema |
 |---|---:|---|
 | `device.property.reported` | `1` | `events/device.property.reported.v1.schema.json` |
+| `device.property.set.requested` | `1` | `events/device.property.set.requested.v1.schema.json` |
 | `device.property.set.acknowledged` | `1` | `events/device.property.set.acknowledged.v1.schema.json` |
 | `device.event.reported` | `1` | `events/device.event.reported.v1.schema.json` |
 | `device.event.received` | `1` | `events/device.event.received.v1.schema.json` |
+| `device.service.call.requested` | `1` | `events/device.service.call.requested.v1.schema.json` |
 | `device.service.call.acknowledged` | `1` | `events/device.service.call.acknowledged.v1.schema.json` |
 
 Envelope validation alone is not enough. A valid envelope with the wrong payload is still an invalid event.

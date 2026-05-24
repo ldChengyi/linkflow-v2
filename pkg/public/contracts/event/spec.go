@@ -19,6 +19,13 @@ var DevicePropertyReported = Spec{
 	Topic:      TopicDeviceEventsV1,
 }
 
+var DevicePropertySetRequested = Spec{
+	Type:       TypeDevicePropertySetRequested,
+	Version:    VersionDevicePropertySetRequested,
+	SchemaFile: PropertySetRequestedV1SchemaFile,
+	Topic:      TopicDeviceEventsV1,
+}
+
 var DevicePropertySetAcknowledged = Spec{
 	Type:       TypeDevicePropertySetAcknowledged,
 	Version:    VersionDevicePropertySetAcknowledged,
@@ -54,6 +61,13 @@ var DeviceServiceCallAcknowledged = Spec{
 	Topic:      TopicDeviceEventsV1,
 }
 
+var DeviceServiceCallRequested = Spec{
+	Type:       TypeDeviceServiceCallRequested,
+	Version:    VersionDeviceServiceCallRequested,
+	SchemaFile: ServiceCallRequestedV1SchemaFile,
+	Topic:      TopicDeviceEventsV1,
+}
+
 var DeviceConnectionChanged = Spec{
 	Type:       TypeDeviceConnectionChanged,
 	Version:    VersionDeviceConnectionChanged,
@@ -77,10 +91,12 @@ var DeviceEventReceived = Spec{
 
 var specs = []Spec{
 	DevicePropertyReported,
+	DevicePropertySetRequested,
 	DevicePropertySetAcknowledged,
 	DeviceConnected,
 	DeviceDisconnected,
 	DeviceEventReported,
+	DeviceServiceCallRequested,
 	DeviceServiceCallAcknowledged,
 	DeviceConnectionChanged,
 	DevicePropertyChanged,
