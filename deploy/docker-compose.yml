@@ -17,16 +17,16 @@ services:
     container_name: linkflow-emqx
     restart: unless-stopped
     ports:
-      - "1883:1883" # MQTT TCP
-      - "8083:8083" # MQTT WebSocket
-      - "18083:18083" # Dashboard
+      - "${EMQX_MQTT_PORT:-1883}:1883" # MQTT TCP
+      - "${EMQX_WS_PORT:-8083}:8083" # MQTT WebSocket
+      - "${EMQX_DASHBOARD_PORT:-18083}:18083" # Dashboard
     environment:
-      EMQX_NAME: linkflow-emqx
-      EMQX_HOST: 127.0.0.1
-      EMQX_DASHBOARD__DEFAULT_USERNAME: admin
-      EMQX_DASHBOARD__DEFAULT_PASSWORD: public
-      EMQX_API_KEY__BOOTSTRAP_FILE: /opt/emqx/etc/default_api_key.conf
-      EMQX_ALLOW_ANONYMOUS: "false"
+      EMQX_NAME: ${EMQX_NAME:-linkflow-emqx}
+      EMQX_HOST: ${EMQX_HOST:-127.0.0.1}
+      EMQX_DASHBOARD__DEFAULT_USERNAME: ${EMQX_DASHBOARD__DEFAULT_USERNAME:-admin}
+      EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD__DEFAULT_PASSWORD:-public}
+      EMQX_API_KEY__BOOTSTRAP_FILE: ${EMQX_API_KEY__BOOTSTRAP_FILE:-/opt/emqx/etc/default_api_key.conf}
+      EMQX_ALLOW_ANONYMOUS: "${EMQX_ALLOW_ANONYMOUS:-false}"
     volumes:
       - emqx_data:/opt/emqx/data
       - emqx_log:/opt/emqx/log
@@ -52,12 +52,12 @@ services:
       redpanda:
         condition: service_healthy
     environment:
-      EMQX_API_URL: http://emqx:18083
-      EMQX_API_KEY: linkflow-init
-      EMQX_API_SECRET: linkflow-init-secret
-      BACKEND_AUTH_URL: http://backend:18080/internal/emqx/auth
-      KAFKA_BOOTSTRAP: redpanda:9092 # 新增
-      KAFKA_TOPIC: lf.v1.device.events
+      EMQX_API_URL: ${EMQX_CONTAINER_API_URL:-http://emqx:18083}
+      EMQX_API_KEY: ${EMQX_API_KEY:-linkflow-init}
+      EMQX_API_SECRET: ${EMQX_API_SECRET:-linkflow-init-secret}
+      BACKEND_AUTH_URL: ${BACKEND_AUTH_URL:-http://backend:18080/internal/emqx/auth}
+      KAFKA_BOOTSTRAP: ${KAFKA_CONTAINER_BOOTSTRAP:-redpanda:9092}
+      KAFKA_TOPIC: ${KAFKA_TOPIC:-lf.v1.device.events}
     volumes:
       - ./init-scripts/emqx:/init-scripts/emqx:ro
     entrypoint:
@@ -87,15 +87,33 @@ services:
       redpanda-init:
         condition: service_completed_successfully
     ports:
-      - "18080:18080"
+      - "${BACKEND_HTTP_PORT:-18080}:18080"
     environment:
-      HTTP_ADDR: :18080
-      POSTGRES_DSN: postgres://linkflow:linkflow123@timescaledb:5432/linkflow?sslmode=disable
-      REDIS_ADDR: redis:6379
-      AUTH_ACCESS_TOKEN_SECRET: dev-only-linkflow-access-token-secret-change-before-production
-      MQTT_GATEWAY_USERNAME: linkflow-mqtt-gateway
-      MQTT_GATEWAY_PASSWORD: linkflow-mqtt-gateway-secret
-      KAFKA_BROKERS: redpanda:9092
+      HTTP_ADDR: ${BACKEND_HTTP_ADDR:-:18080}
+      HTTP_READ_TIMEOUT: ${HTTP_READ_TIMEOUT:-5s}
+      HTTP_WRITE_TIMEOUT: ${HTTP_WRITE_TIMEOUT:-10s}
+      HTTP_IDLE_TIMEOUT: ${HTTP_IDLE_TIMEOUT:-60s}
+      HTTP_REQUEST_TIMEOUT: ${HTTP_REQUEST_TIMEOUT:-5s}
+      POSTGRES_DSN: ${BACKEND_POSTGRES_DSN:-postgres://linkflow:linkflow123@timescaledb:5432/linkflow?sslmode=disable}
+      POSTGRES_MAX_OPEN_CONNS: "${POSTGRES_MAX_OPEN_CONNS:-10}"
+      POSTGRES_MAX_IDLE_CONNS: "${POSTGRES_MAX_IDLE_CONNS:-5}"
+      POSTGRES_CONN_MAX_LIFETIME: ${POSTGRES_CONN_MAX_LIFETIME:-30m}
+      POSTGRES_CONN_MAX_IDLE_TIME: ${POSTGRES_CONN_MAX_IDLE_TIME:-5m}
+      REDIS_ADDR: ${BACKEND_REDIS_ADDR:-redis:6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "${REDIS_DB:-0}"
+      REDIS_DIAL_TIMEOUT: ${REDIS_DIAL_TIMEOUT:-5s}
+      REDIS_READ_TIMEOUT: ${REDIS_READ_TIMEOUT:-3s}
+      REDIS_WRITE_TIMEOUT: ${REDIS_WRITE_TIMEOUT:-3s}
+      AUTH_ACCESS_TOKEN_SECRET: ${AUTH_ACCESS_TOKEN_SECRET:-dev-only-linkflow-access-token-secret-change-before-production}
+      AUTH_ACCESS_TOKEN_TTL: ${AUTH_ACCESS_TOKEN_TTL:-24h}
+      AUTH_TOKEN_ISSUER: ${AUTH_TOKEN_ISSUER:-linkflow-backend}
+      AUTH_BCRYPT_COST: "${AUTH_BCRYPT_COST:-12}"
+      MQTT_GATEWAY_USERNAME: ${MQTT_GATEWAY_USERNAME:-linkflow-mqtt-gateway}
+      MQTT_GATEWAY_PASSWORD: ${MQTT_GATEWAY_PASSWORD:-linkflow-mqtt-gateway-secret}
+      KAFKA_BROKERS: ${KAFKA_CONTAINER_BROKERS:-redpanda:9092}
+      REALTIME_GROUP_ID: ${REALTIME_GROUP_ID:-}
+      REALTIME_ACCESS_COOKIE: ${REALTIME_ACCESS_COOKIE:-lf_access}
     healthcheck:
       test: [ "CMD", "wget", "-qO-", "http://127.0.0.1:18080/internal/emqx/healthz" ]
       interval: 10s
@@ -117,7 +135,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "80:80"
+      - "${WEB_HTTP_PORT:-80}:80"
     networks:
       - linkflow
 
@@ -140,15 +158,29 @@ services:
       redis:
         condition: service_healthy
     environment:
-      KAFKA_BROKERS: redpanda:9092
-      KAFKA_GROUP_ID: device-event-processor
-      POSTGRES_DSN: postgres://linkflow:linkflow123@timescaledb:5432/linkflow?sslmode=disable
-      REDIS_ADDR: redis:6379
-      DEVICE_ONLINE_TTL: 120s
-      EMQX_API_URL: http://emqx:18083
-      EMQX_API_KEY: linkflow-init
-      EMQX_API_SECRET: linkflow-init-secret
-      CONTRACTS_DIR: /app/contracts
+      KAFKA_BROKERS: ${KAFKA_CONTAINER_BROKERS:-redpanda:9092}
+      KAFKA_GROUP_ID: ${KAFKA_GROUP_ID:-device-event-processor}
+      CONSUMER_WORKERS: "${CONSUMER_WORKERS:-4}"
+      CONSUMER_BUFFER: "${CONSUMER_BUFFER:-128}"
+      CONSUMER_MAX_RETRIES: "${CONSUMER_MAX_RETRIES:-3}"
+      CONSUMER_RETRY_BACKOFF: ${CONSUMER_RETRY_BACKOFF:-200ms}
+      POSTGRES_DSN: ${DEVICE_EVENT_PROCESSOR_POSTGRES_DSN:-postgres://linkflow:linkflow123@timescaledb:5432/linkflow?sslmode=disable}
+      POSTGRES_MAX_OPEN_CONNS: "${POSTGRES_MAX_OPEN_CONNS:-10}"
+      POSTGRES_MAX_IDLE_CONNS: "${POSTGRES_MAX_IDLE_CONNS:-5}"
+      POSTGRES_CONN_MAX_LIFETIME: ${POSTGRES_CONN_MAX_LIFETIME:-30m}
+      POSTGRES_CONN_MAX_IDLE_TIME: ${POSTGRES_CONN_MAX_IDLE_TIME:-5m}
+      REDIS_ADDR: ${DEVICE_EVENT_PROCESSOR_REDIS_ADDR:-redis:6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "${REDIS_DB:-0}"
+      REDIS_DIAL_TIMEOUT: ${REDIS_DIAL_TIMEOUT:-5s}
+      REDIS_READ_TIMEOUT: ${REDIS_READ_TIMEOUT:-3s}
+      REDIS_WRITE_TIMEOUT: ${REDIS_WRITE_TIMEOUT:-3s}
+      DEVICE_ONLINE_TTL: ${DEVICE_ONLINE_TTL:-120s}
+      EMQX_API_URL: ${EMQX_CONTAINER_API_URL:-http://emqx:18083}
+      EMQX_API_KEY: ${EMQX_API_KEY:-linkflow-init}
+      EMQX_API_SECRET: ${EMQX_API_SECRET:-linkflow-init-secret}
+      EMQX_PUBLISH_TIMEOUT: ${EMQX_PUBLISH_TIMEOUT:-3s}
+      CONTRACTS_DIR: ${CONTRACTS_CONTAINER_DIR:-/app/contracts}
     networks:
       - linkflow
 
@@ -196,22 +228,22 @@ services:
     command:
       - redpanda
       - start
-      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
-      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
-      - --pandaproxy-addr=internal://0.0.0.0:8082,external://0.0.0.0:18082
-      - --advertise-pandaproxy-addr=internal://redpanda:8082,external://localhost:18082
-      - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:18081
-      - --rpc-addr=redpanda:33145
-      - --advertise-rpc-addr=redpanda:33145
-      - --smp=1
-      - --memory=1G
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:${REDPANDA_KAFKA_PORT:-19092}
+      - --advertise-kafka-addr=internal://redpanda:9092,external://${REDPANDA_ADVERTISE_HOST:-localhost}:${REDPANDA_KAFKA_PORT:-19092}
+      - --pandaproxy-addr=internal://0.0.0.0:8082,external://0.0.0.0:${REDPANDA_REST_PROXY_PORT:-18082}
+      - --advertise-pandaproxy-addr=internal://redpanda:8082,external://${REDPANDA_ADVERTISE_HOST:-localhost}:${REDPANDA_REST_PROXY_PORT:-18082}
+      - --schema-registry-addr=internal://0.0.0.0:8081,external://0.0.0.0:${REDPANDA_SCHEMA_REGISTRY_PORT:-18081}
+      - --rpc-addr=redpanda:${REDPANDA_RPC_PORT:-33145}
+      - --advertise-rpc-addr=redpanda:${REDPANDA_RPC_PORT:-33145}
+      - --smp=${REDPANDA_SMP:-1}
+      - --memory=${REDPANDA_MEMORY:-1G}
       - --mode=dev-container
-      - --default-log-level=info
+      - --default-log-level=${REDPANDA_LOG_LEVEL:-info}
     ports:
-      - "18081:18081" # Schema Registry
-      - "18082:18082" # REST Proxy
-      - "19092:19092" # Kafka (宿主机访问)
-      - "19644:9644" # Admin API
+      - "${REDPANDA_SCHEMA_REGISTRY_PORT:-18081}:${REDPANDA_SCHEMA_REGISTRY_PORT:-18081}" # Schema Registry
+      - "${REDPANDA_REST_PROXY_PORT:-18082}:${REDPANDA_REST_PROXY_PORT:-18082}" # REST Proxy
+      - "${REDPANDA_KAFKA_PORT:-19092}:${REDPANDA_KAFKA_PORT:-19092}" # Kafka (宿主机访问)
+      - "${REDPANDA_ADMIN_API_PORT:-19644}:9644" # Admin API
     volumes:
       - redpanda_data:/var/lib/redpanda/data
     healthcheck:
@@ -232,7 +264,7 @@ services:
       redpanda:
         condition: service_healthy
     environment:
-      KAFKA_BROKERS: redpanda:9092
+      KAFKA_BROKERS: ${KAFKA_CONTAINER_BROKERS:-redpanda:9092}
     volumes:
       - ./init-scripts/redpanda:/init-scripts/redpanda:ro
     entrypoint:
@@ -254,13 +286,13 @@ services:
       redpanda-init:
         condition: service_completed_successfully
     ports:
-      - "8080:8080"
+      - "${REDPANDA_CONSOLE_PORT:-8080}:8080"
     environment:
-      KAFKA_BROKERS: redpanda:9092
-      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
-      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
-      REDPANDA_ADMINAPI_ENABLED: "true"
-      REDPANDA_ADMINAPI_URLS: http://redpanda:9644
+      KAFKA_BROKERS: ${KAFKA_CONTAINER_BROKERS:-redpanda:9092}
+      KAFKA_SCHEMAREGISTRY_ENABLED: "${KAFKA_SCHEMAREGISTRY_ENABLED:-true}"
+      KAFKA_SCHEMAREGISTRY_URLS: ${KAFKA_SCHEMAREGISTRY_URLS:-http://redpanda:8081}
+      REDPANDA_ADMINAPI_ENABLED: "${REDPANDA_ADMINAPI_ENABLED:-true}"
+      REDPANDA_ADMINAPI_URLS: ${REDPANDA_ADMINAPI_URLS:-http://redpanda:9644}
     networks:
       - linkflow
 
@@ -274,13 +306,13 @@ services:
     container_name: linkflow-timescaledb
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "${TIMESCALEDB_PORT:-5432}:5432"
     environment:
-      POSTGRES_USER: linkflow
-      POSTGRES_PASSWORD: linkflow123
-      POSTGRES_DB: linkflow
-      TS_TUNE_MEMORY: 2GB
-      TS_TUNE_NUM_CPUS: "2"
+      POSTGRES_USER: ${POSTGRES_USER:-linkflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-linkflow123}
+      POSTGRES_DB: ${POSTGRES_DB:-linkflow}
+      TS_TUNE_MEMORY: ${TS_TUNE_MEMORY:-2GB}
+      TS_TUNE_NUM_CPUS: "${TS_TUNE_NUM_CPUS:-2}"
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
       - ./init-scripts/timescaledb:/docker-entrypoint-initdb.d
@@ -302,15 +334,15 @@ services:
     container_name: linkflow-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     command:
       - redis-server
       - --appendonly
-      - "yes"
+      - "${REDIS_APPENDONLY:-yes}"
       - --maxmemory
-      - "512mb"
+      - "${REDIS_MAXMEMORY:-512mb}"
       - --maxmemory-policy
-      - "allkeys-lru"
+      - "${REDIS_MAXMEMORY_POLICY:-allkeys-lru}"
     volumes:
       - redis_data:/data
     healthcheck:
